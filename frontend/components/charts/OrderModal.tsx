@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
@@ -27,6 +27,7 @@ type Props = {
     entry?: number | null;
     stop?: number | null;
     target?: number | null;
+    setup_id?: string | null;
   };
   onClose:     () => void;
   onFilled:    (result: OrderResult) => void;
@@ -34,12 +35,15 @@ type Props = {
 
 export default function OrderModal({ symbol, currentPrice, defaultSide, initialPlan, onClose, onFilled }: Props) {
   const orderIntent = useOrderIntentKey();
+  const ticketSeeded = useRef(false);
   const [side, setSide]             = useState<"buy" | "sell">(defaultSide);
   const [quantity, setQuantity]     = useState("1");
   const [price, setPrice]           = useState((initialPlan?.entry ?? currentPrice).toFixed(2));
   const [stopLoss, setStopLoss]     = useState(initialPlan?.stop != null ? initialPlan.stop.toFixed(2) : "");
   const [target, setTarget]         = useState(initialPlan?.target != null ? initialPlan.target.toFixed(2) : "");
   const [setupType, setSetupType]   = useState("");
+  const [thesis, setThesis]         = useState("");
+  const [invalidationRule, setInvalidationRule] = useState("");
   const [notes, setNotes]           = useState("");
   const [placing, setPlacing]       = useState(false);
   const [error, setError]           = useState("");
@@ -74,10 +78,13 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   }, [defaultSide]);
 
   useEffect(() => {
-    setPrice((initialPlan?.entry ?? currentPrice).toFixed(2));
+    if (ticketSeeded.current) return;
+    if (initialPlan?.entry == null && initialPlan?.stop == null && initialPlan?.target == null) return;
+    if (initialPlan?.entry != null) setPrice(initialPlan.entry.toFixed(2));
     setStopLoss(initialPlan?.stop != null ? initialPlan.stop.toFixed(2) : "");
     setTarget(initialPlan?.target != null ? initialPlan.target.toFixed(2) : "");
-  }, [currentPrice, initialPlan?.entry, initialPlan?.stop, initialPlan?.target]);
+    ticketSeeded.current = true;
+  }, [initialPlan?.entry, initialPlan?.stop, initialPlan?.target]);
 
   const priceNum = parseFloat(price) || 0;
   const slNum    = parseFloat(stopLoss) || 0;
@@ -110,6 +117,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
     try {
       const req: PlaceOrderRequest = {
         symbol,
+        setup_id: initialPlan?.setup_id ?? null,
         side,
         quantity: qtyNum,
         price:    priceNum,
@@ -118,6 +126,8 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         source_context: symbol,
         chart_snapshot: buildChartSnapshotMetadata(symbol, priceNum),
         live_confirmed: canRouteLive && liveConfirmed,
+        ...(thesis.trim() ? { thesis: thesis.trim() } : {}),
+        ...(invalidationRule.trim() ? { invalidation_rule: invalidationRule.trim() } : {}),
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
@@ -141,7 +151,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-[14px] shadow-2xl w-[380px] max-h-[90vh] overflow-y-auto">
+      <div data-testid="chart-order-modal" className="bg-white rounded-[14px] shadow-2xl w-[380px] max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0ee]">
           <div className="flex items-center gap-3">
@@ -220,6 +230,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               type="number"
               value={price}
               onChange={e => setPrice(e.target.value)}
+              placeholder="Entry"
               step="0.05"
               className="w-full text-[14px] font-semibold border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#f4f7fb] tabular-nums"
               style={{ borderColor: accent + "66" }}
@@ -235,6 +246,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               type="number"
               value={quantity}
               onChange={e => setQuantity(e.target.value)}
+              placeholder="Qty"
               min="1"
               step="1"
               className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#f4f7fb]"
@@ -264,7 +276,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
                 type="number"
                 value={stopLoss}
                 onChange={e => setStopLoss(e.target.value)}
-                placeholder="Optional"
+                placeholder="Stop"
                 step="0.05"
                 className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none focus:border-[#e5383b]"
               />
@@ -277,7 +289,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
                 type="number"
                 value={target}
                 onChange={e => setTarget(e.target.value)}
-                placeholder="Optional"
+                placeholder="Target"
                 step="0.05"
                 className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none focus:border-[#26a65b]"
               />
@@ -323,6 +335,34 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             </select>
           </div>
 
+          {/* Thesis */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Thesis
+            </label>
+            <textarea
+              value={thesis}
+              onChange={e => setThesis(e.target.value)}
+              placeholder="Thesis"
+              rows={2}
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#f4f7fb]"
+            />
+          </div>
+
+          {/* Invalidation rule */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Invalidation rule
+            </label>
+            <textarea
+              value={invalidationRule}
+              onChange={e => setInvalidationRule(e.target.value)}
+              placeholder="Invalidation rule"
+              rows={2}
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#f4f7fb]"
+            />
+          </div>
+
           {/* Notes */}
           <div>
             <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
@@ -331,7 +371,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Entry rationale, market context…"
+              placeholder="Notes (optional)"
               rows={2}
               className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#f4f7fb]"
             />

@@ -31,13 +31,23 @@ import {
 import type {
   AiPatterns,
   BacktestResponse,
+  BrokerImportResult,
+  BrokerFillReconciliation,
+  BrokerFillReconciliationResponse,
+  BrokerFillReconciliationResolveRequest,
   BrokerHolding,
+  BrokerOrderSnapshot,
+  BrokerOrderbookResponse,
   BrokerOrderActivityResponse,
+  BrokerAuditEvent,
+  BrokerAuditEventResponse,
   BrokerOrderReconciliation,
+  BrokerPosition,
   BrokerProfile,
   CandlesResponse,
   ChartLayout,
   ChartWorkspace,
+  CreateSetupRequest,
   CreateJournalEntry,
   DataHealth,
   DataRun,
@@ -48,6 +58,8 @@ import type {
   JournalAnalytics,
   JournalEntry,
   JournalStats,
+  CaptureJournalIntradayPathRequest,
+  CaptureJournalIntradayPathResult,
   LiveMarketStatus,
   LiveQuote,
   LiveSectorIndex,
@@ -74,6 +86,20 @@ import type {
   SectorBreadthItem,
   SectorListResponse,
   SectorTaxonomyMetadata,
+  Setup,
+  SetupReview,
+  SetupReviewRequest,
+  SetupStatus,
+  CreateRulebookRequest,
+  CreateScannerDefinitionRequest,
+  Rulebook,
+  ScannerDefinition,
+  ScannerFilter,
+  ScannerFilterGroup,
+  TradeReview,
+  TradeReviewRequest,
+  UpdateScannerDefinitionRequest,
+  UpdateSetupRequest,
   SharedScreen,
   SymbolSearchResult,
   UpdateJournalEntry,
@@ -87,6 +113,7 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import { defaultSetupReviewRules, evaluateSetupReview } from "./setup-review";
 
 export * from './api/types'
 export {
@@ -240,6 +267,228 @@ export async function deleteScreen(id: string): Promise<void> {
   }
 }
 
+const scannerDefinitionLocalKey = "alphavyuh-scanner-definitions-v1";
+
+function parseScannerFilterResponse(value: unknown): ScannerFilter {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.group_id !== "string" ||
+      typeof value.kind !== "string" || typeof value.sort_order !== "number") {
+    throw new Error("Scanner definition returned an invalid filter.");
+  }
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    group_id: value.group_id,
+    kind: value.kind,
+    value: value.value,
+    sort_order: value.sort_order,
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+  };
+}
+
+function parseScannerFilterGroupResponse(value: unknown, fallbackFilters: ScannerFilter[]): ScannerFilterGroup {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.scanner_definition_id !== "string" ||
+      (value.operator !== "and" && value.operator !== "or") || typeof value.sort_order !== "number") {
+    throw new Error("Scanner definition returned an invalid filter group.");
+  }
+  const rawFilters = Array.isArray(value.filters) ? value.filters : fallbackFilters;
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    scanner_definition_id: value.scanner_definition_id,
+    operator: value.operator,
+    sort_order: value.sort_order,
+    filters: rawFilters.map(parseScannerFilterResponse),
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+  };
+}
+
+function parseScannerDefinitionResponse(value: unknown): ScannerDefinition {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
+      (value.universe !== "all_nse" && value.universe !== "nifty500" &&
+        value.universe !== "nifty_midsmallcap_400" && value.universe !== "custom") ||
+      !isRecord(value.definition) || typeof value.created_at !== "string" || typeof value.updated_at !== "string") {
+    throw new Error("Scanner definition returned an invalid response.");
+  }
+  const topLevelFilters = Array.isArray(value.filters)
+    ? value.filters.map(parseScannerFilterResponse)
+    : [];
+  const rawGroups = Array.isArray(value.groups) ? value.groups : [];
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    name: value.name,
+    universe: value.universe,
+    definition: value.definition,
+    is_active: value.is_active !== false,
+    groups: rawGroups.map((group) => {
+      const groupId = isRecord(group) && typeof group.id === "string" ? group.id : "";
+      return parseScannerFilterGroupResponse(
+        group,
+        topLevelFilters.filter((filter) => filter.group_id === groupId),
+      );
+    }),
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function readLocalScannerDefinitions(): ScannerDefinition[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(scannerDefinitionLocalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      try {
+        return [parseScannerDefinitionResponse(value)];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalScannerDefinitions(definitions: ScannerDefinition[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(scannerDefinitionLocalKey, JSON.stringify(definitions));
+}
+
+function localScannerDefinitionId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? `local-${crypto.randomUUID()}`
+    : `local-scanner-definition-${Date.now()}`;
+}
+
+function localScannerDefinitionFromRequest(request: CreateScannerDefinitionRequest): ScannerDefinition {
+  const now = new Date().toISOString();
+  const definitionId = localScannerDefinitionId();
+  const groups = request.groups.map((group, groupIndex) => {
+    const groupId = `local-${definitionId}-group-${groupIndex}`;
+    return {
+      id: groupId,
+      user_id: "mock-user",
+      scanner_definition_id: definitionId,
+      operator: group.operator,
+      sort_order: group.sort_order,
+      filters: group.filters.map((filter, filterIndex) => ({
+        id: `local-${definitionId}-filter-${groupIndex}-${filterIndex}`,
+        user_id: "mock-user",
+        group_id: groupId,
+        kind: filter.kind,
+        value: filter.value,
+        sort_order: filter.sort_order,
+        created_at: now,
+      })),
+      created_at: now,
+    } satisfies ScannerFilterGroup;
+  });
+  return {
+    id: definitionId,
+    user_id: "mock-user",
+    name: request.name.trim(),
+    universe: request.universe,
+    definition: request.definition,
+    is_active: true,
+    groups,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export async function getScannerDefinitions(): Promise<ScannerDefinition[]> {
+  if (shouldUseMockFallback()) return readLocalScannerDefinitions();
+  return cachedClientRequest("scanner-definitions", 5_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/scanner/definitions`, { headers });
+    if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definitions are temporarily unavailable."));
+    const data = await res.json();
+    if (!isRecord(data) || !Array.isArray(data.definitions)) {
+      throw new Error("Scanner definitions returned an invalid response.");
+    }
+    return data.definitions.map(parseScannerDefinitionResponse);
+  });
+}
+
+export async function createScannerDefinition(request: CreateScannerDefinitionRequest): Promise<ScannerDefinition> {
+  if (shouldUseMockFallback()) {
+    const created = localScannerDefinitionFromRequest(request);
+    writeLocalScannerDefinitions([created, ...readLocalScannerDefinitions()]);
+    invalidateClientCache(["scanner-definitions"]);
+    return created;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be saved."));
+  const data = await res.json();
+  if (!isRecord(data) || !isRecord(data.definition)) {
+    throw new Error("Scanner definition save returned an invalid response.");
+  }
+  const created = parseScannerDefinitionResponse({
+    ...data.definition,
+    groups: data.groups,
+    filters: data.filters,
+  });
+  invalidateClientCache(["scanner-definitions"]);
+  return created;
+}
+
+export async function updateScannerDefinition(
+  definitionId: string,
+  request: UpdateScannerDefinitionRequest,
+): Promise<ScannerDefinition> {
+  if (shouldUseMockFallback()) {
+    const existing = readLocalScannerDefinitions().find((definition) => definition.id === definitionId);
+    if (!existing) throw new Error("Scanner definition could not be found.");
+    const nextRequest: CreateScannerDefinitionRequest = {
+      name: request.name ?? existing.name,
+      universe: request.universe ?? existing.universe,
+      definition: request.definition ?? existing.definition,
+      groups: request.groups ?? existing.groups.map((group) => ({
+        operator: group.operator,
+        sort_order: group.sort_order,
+        filters: group.filters.map((filter) => ({ kind: filter.kind, value: filter.value, sort_order: filter.sort_order })),
+      })),
+    };
+    const updated = localScannerDefinitionFromRequest(nextRequest);
+    const stableUpdated = { ...updated, id: existing.id, created_at: existing.created_at };
+    writeLocalScannerDefinitions(readLocalScannerDefinitions().map((definition) => definition.id === definitionId ? stableUpdated : definition));
+    invalidateClientCache(["scanner-definitions"]);
+    return stableUpdated;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions/${encodeURIComponent(definitionId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be updated."));
+  const data = await res.json();
+  const updated = parseScannerDefinitionResponse(data);
+  invalidateClientCache(["scanner-definitions"]);
+  return updated;
+}
+
+export async function deleteScannerDefinition(definitionId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeLocalScannerDefinitions(readLocalScannerDefinitions().filter((definition) => definition.id !== definitionId));
+    invalidateClientCache(["scanner-definitions"]);
+    return;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions/${encodeURIComponent(definitionId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be deleted."));
+  invalidateClientCache(["scanner-definitions"]);
+}
+
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {
   const cacheKey = options?.lite ? "watchlists:lite" : "watchlists";
   if (options?.force) {
@@ -378,6 +627,876 @@ export async function reorderWatchlist(
 }
 
 const workflowLocalKey = "alphavyuh-workflow-state-v1";
+const setupLocalKey = "alphavyuh-setups-v1";
+const setupReviewLocalKey = "alphavyuh-setup-reviews-v1";
+const rulebookLocalKey = "alphavyuh-rulebooks-v1";
+
+function readLocalSetups(): Setup[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(setupLocalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      try {
+        return [parseSetupResponse(value)];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSetups(setups: Setup[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(setupLocalKey, JSON.stringify(setups));
+}
+
+function readLocalSetupReviews(): Record<string, SetupReview> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(setupReviewLocalKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!isRecord(parsed)) return {};
+    const reviews: Record<string, SetupReview> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      try {
+        reviews[key] = parseSetupReviewResponse(value);
+      } catch {
+        // Ignore stale or malformed local review records.
+      }
+    }
+    return reviews;
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSetupReview(review: SetupReview) {
+  if (typeof window === "undefined") return;
+  const reviews = readLocalSetupReviews();
+  reviews[review.setup_id] = review;
+  window.localStorage.setItem(setupReviewLocalKey, JSON.stringify(reviews));
+}
+
+function defaultLocalRulebook(): Rulebook {
+  return {
+    id: "local-starter-rulebook",
+    name: "Starter discipline",
+    description: "Defined stop, written plan, minimum 1:2 R:R, and controlled risk.",
+    min_planned_rr: 2,
+    max_risk_amount: null,
+    max_account_risk_pct: null,
+    is_default: true,
+    active: true,
+    rules: defaultSetupReviewRules().map((rule) => ({
+      code: rule.code,
+      label: rule.label,
+      severity: rule.severity,
+      config: rule.config ?? {},
+      enabled: rule.enabled !== false,
+      sort_order: rule.sort_order ?? 0,
+    })),
+  };
+}
+
+function readLocalRulebooks(): Rulebook[] {
+  if (typeof window === "undefined") return [defaultLocalRulebook()];
+  try {
+    const raw = window.localStorage.getItem(rulebookLocalKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!Array.isArray(parsed)) return [defaultLocalRulebook()];
+    const rulebooks = parsed.filter((value): value is Rulebook => {
+      try {
+        parseRulebookResponse(value);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return rulebooks.length > 0 ? rulebooks : [defaultLocalRulebook()];
+  } catch {
+    return [defaultLocalRulebook()];
+  }
+}
+
+function writeLocalRulebooks(rulebooks: Rulebook[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(rulebookLocalKey, JSON.stringify(rulebooks));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseBrokerAuditEvent(value: unknown): BrokerAuditEvent {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.event_type !== "string" ||
+      typeof value.outcome !== "string" || typeof value.actor_type !== "string") {
+    throw new Error("Broker audit history returned an invalid event.");
+  }
+  const nullableString = (candidate: unknown): string | null => (
+    candidate == null ? null : typeof candidate === "string" ? candidate : null
+  );
+  return {
+    id: value.id,
+    event_type: value.event_type,
+    outcome: value.outcome,
+    actor_type: value.actor_type,
+    broker: nullableString(value.broker),
+    broker_order_id: nullableString(value.broker_order_id),
+    idempotency_key: nullableString(value.idempotency_key),
+    setup_id: nullableString(value.setup_id),
+    journal_id: nullableString(value.journal_id),
+    metadata: isRecord(value.metadata) ? value.metadata : {},
+    created_at: nullableString(value.created_at),
+  };
+}
+
+function parseBrokerAuditEventResponse(value: unknown): BrokerAuditEventResponse {
+  if (!isRecord(value) || !Array.isArray(value.events)) {
+    throw new Error("Broker audit history returned an invalid response.");
+  }
+  const events = value.events.map(parseBrokerAuditEvent);
+  return {
+    events,
+    count: isFiniteNumber(value.count) ? Math.max(0, Math.trunc(value.count)) : events.length,
+  };
+}
+
+function parseBrokerImportResult(value: unknown): BrokerImportResult {
+  if (!isRecord(value)) {
+    throw new Error("Broker import returned an invalid response.");
+  }
+
+  const readNonNegativeInteger = (candidate: unknown, fallback: number, field: string): number => {
+    if (candidate === undefined) return fallback;
+    if (!isFiniteNumber(candidate) || !Number.isInteger(candidate) || candidate < 0) {
+      throw new Error(`Broker import returned an invalid ${field}.`);
+    }
+    return candidate;
+  };
+
+  const imported = readNonNegativeInteger(value.imported, 0, "imported count");
+  const skipped = readNonNegativeInteger(value.skipped, 0, "skipped count");
+  const unmatched_fills = readNonNegativeInteger(value.unmatched_fills, 0, "unmatched fill count");
+  const total_filled_orders = readNonNegativeInteger(
+    value.total_filled_orders,
+    imported + skipped + unmatched_fills,
+    "filled-order count",
+  );
+  const unmatched_symbols = value.unmatched_symbols === undefined
+    ? []
+    : Array.isArray(value.unmatched_symbols) && value.unmatched_symbols.every((symbol) => typeof symbol === "string")
+      ? value.unmatched_symbols.slice(0, 20)
+      : null;
+  if (!unmatched_symbols) {
+    throw new Error("Broker import returned invalid unmatched symbols.");
+  }
+
+  const reconciliation_status = value.reconciliation_status === undefined
+    ? unmatched_fills > 0 ? "needs_review" : "complete"
+    : value.reconciliation_status;
+  if (reconciliation_status !== "complete" && reconciliation_status !== "needs_review") {
+    throw new Error("Broker import returned an invalid reconciliation status.");
+  }
+  if ((reconciliation_status === "complete") !== (unmatched_fills === 0)) {
+    throw new Error("Broker import returned an inconsistent reconciliation status.");
+  }
+
+  const persisted_unmatched_fills = readNonNegativeInteger(
+    value.persisted_unmatched_fills,
+    0,
+    "persisted unmatched-fill count",
+  );
+  if (persisted_unmatched_fills > unmatched_fills) {
+    throw new Error("Broker import returned an inconsistent persisted unmatched-fill count.");
+  }
+  const reconciliation_persistence = value.reconciliation_persistence === undefined
+    ? unmatched_fills > 0 ? "unavailable" : "not_needed"
+    : value.reconciliation_persistence;
+  if (reconciliation_persistence !== "available" &&
+      reconciliation_persistence !== "unavailable" &&
+      reconciliation_persistence !== "not_needed") {
+    throw new Error("Broker import returned an invalid reconciliation persistence state.");
+  }
+  if ((reconciliation_persistence === "not_needed") !== (unmatched_fills === 0)) {
+    throw new Error("Broker import returned an inconsistent reconciliation persistence state.");
+  }
+  if (reconciliation_persistence === "available" && persisted_unmatched_fills !== unmatched_fills) {
+    throw new Error("Broker import returned incomplete persisted reconciliation state.");
+  }
+
+  const last_synced_at = value.last_synced_at === undefined || value.last_synced_at === null
+    ? value.last_synced_at ?? null
+    : typeof value.last_synced_at === "string" ? value.last_synced_at : null;
+  if (value.last_synced_at !== undefined && value.last_synced_at !== null && last_synced_at === null) {
+    throw new Error("Broker import returned an invalid sync timestamp.");
+  }
+
+  return {
+    imported,
+    skipped,
+    unmatched_fills,
+    unmatched_symbols,
+    reconciliation_status,
+    persisted_unmatched_fills,
+    reconciliation_persistence,
+    total_filled_orders,
+    message: typeof value.message === "string" ? value.message : "Broker import completed.",
+    last_synced_at,
+  };
+}
+
+function parseBrokerFillReconciliation(value: unknown): BrokerFillReconciliation {
+  if (!isRecord(value) || typeof value.id !== "string" ||
+      (value.broker !== "zerodha" && value.broker !== "upstox") ||
+      typeof value.broker_order_id !== "string" || typeof value.symbol !== "string" ||
+      (value.side !== "BUY" && value.side !== "SELL") ||
+      !isFiniteNumber(value.filled_quantity) || !Number.isInteger(value.filled_quantity) || value.filled_quantity <= 0 ||
+      !isFiniteNumber(value.average_price) || value.average_price <= 0 ||
+      (value.status !== "needs_review" && value.status !== "linked" && value.status !== "dismissed")) {
+    throw new Error("Broker reconciliation returned an invalid record.");
+  }
+  const nullableString = (candidate: unknown): string | null => (
+    candidate == null ? null : typeof candidate === "string" ? candidate : null
+  );
+  return {
+    id: value.id,
+    broker: value.broker,
+    broker_order_id: value.broker_order_id,
+    symbol: value.symbol.toUpperCase(),
+    side: value.side,
+    filled_quantity: value.filled_quantity,
+    average_price: value.average_price,
+    executed_at: nullableString(value.executed_at),
+    status: value.status,
+    setup_id: nullableString(value.setup_id),
+    journal_id: nullableString(value.journal_id),
+    resolution_note: nullableString(value.resolution_note),
+    last_seen_at: nullableString(value.last_seen_at),
+    created_at: nullableString(value.created_at),
+    updated_at: nullableString(value.updated_at),
+  };
+}
+
+function parseBrokerFillReconciliationResponse(value: unknown): BrokerFillReconciliationResponse {
+  if (!isRecord(value) || !Array.isArray(value.reconciliations)) {
+    throw new Error("Broker reconciliation returned an invalid response.");
+  }
+  const reconciliations = value.reconciliations.map(parseBrokerFillReconciliation);
+  const count = value.count === undefined
+    ? reconciliations.length
+    : isFiniteNumber(value.count) && Number.isInteger(value.count) && value.count >= 0
+      ? value.count
+      : null;
+  if (count === null) {
+    throw new Error("Broker reconciliation returned an invalid count.");
+  }
+  return { reconciliations, count };
+}
+
+function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
+  type EquityPoint = JournalAnalytics["equity_curve"][number];
+  type SetupPoint = JournalAnalytics["setup_breakdown"][number];
+  type MonthlyPoint = JournalAnalytics["monthly_pnl"][number];
+  type DrawdownPoint = JournalAnalytics["drawdown_curve"][number];
+  type CohortRow = NonNullable<JournalAnalytics["cohort_breakdown"]>["scanner"][number];
+
+  const isNullableFiniteNumber = (candidate: unknown): candidate is number | null =>
+    candidate === null || isFiniteNumber(candidate);
+  const isEquityPoint = (candidate: unknown): candidate is EquityPoint =>
+    isRecord(candidate) && typeof candidate.date === "string" && isFiniteNumber(candidate.cumulative_pnl);
+  const isSetupPoint = (candidate: unknown): candidate is SetupPoint =>
+    isRecord(candidate) && typeof candidate.setup === "string" && isFiniteNumber(candidate.trades) &&
+    isFiniteNumber(candidate.wins) && isFiniteNumber(candidate.win_rate) && isFiniteNumber(candidate.total_pnl) &&
+    isFiniteNumber(candidate.avg_pnl) &&
+    (candidate.avg_holding_days === undefined || isNullableFiniteNumber(candidate.avg_holding_days)) &&
+    (candidate.avg_risk_reward === undefined || isNullableFiniteNumber(candidate.avg_risk_reward));
+  const isMonthlyPoint = (candidate: unknown): candidate is MonthlyPoint =>
+    isRecord(candidate) && typeof candidate.month === "string" && isFiniteNumber(candidate.pnl);
+  const isDrawdownPoint = (candidate: unknown): candidate is DrawdownPoint =>
+    isRecord(candidate) && typeof candidate.date === "string" && isFiniteNumber(candidate.drawdown) &&
+    isFiniteNumber(candidate.drawdown_pct);
+  const isCohortRow = (candidate: unknown): candidate is CohortRow =>
+    isRecord(candidate) && typeof candidate.cohort === "string" && isFiniteNumber(candidate.trades) &&
+    isFiniteNumber(candidate.wins) && isFiniteNumber(candidate.win_rate) && isFiniteNumber(candidate.total_pnl) &&
+    isFiniteNumber(candidate.avg_pnl) && isNullableFiniteNumber(candidate.avg_r_multiple) &&
+    isFiniteNumber(candidate.reviewed_trades);
+
+  const equity_curve = isRecord(value) && Array.isArray(value.equity_curve) ? value.equity_curve : null;
+  const setup_breakdown = isRecord(value) && Array.isArray(value.setup_breakdown) ? value.setup_breakdown : null;
+  const monthly_pnl = isRecord(value) && Array.isArray(value.monthly_pnl) ? value.monthly_pnl : null;
+  const drawdown_curve = isRecord(value) && Array.isArray(value.drawdown_curve) ? value.drawdown_curve : null;
+  if (!equity_curve || !equity_curve.every(isEquityPoint) || !setup_breakdown || !setup_breakdown.every(isSetupPoint) ||
+      !monthly_pnl || !monthly_pnl.every(isMonthlyPoint) || !drawdown_curve || !drawdown_curve.every(isDrawdownPoint) ||
+      !isRecord(value) || !isNullableFiniteNumber(value.max_drawdown) || !isFiniteNumber(value.longest_dd_days) ||
+      !isNullableFiniteNumber(value.recovery_factor) || !isNullableFiniteNumber(value.profit_factor)) {
+    throw new Error("Journal analytics returned an invalid response.");
+  }
+
+  let review_summary: JournalAnalytics["review_summary"];
+  if (value.review_summary !== undefined) {
+    const rawSummary = value.review_summary;
+    const adherenceValues = new Set(["followed", "partial", "not_followed", "unknown"]);
+    if (!isRecord(rawSummary) || !isFiniteNumber(rawSummary.minimum_sample_size) ||
+        !isFiniteNumber(rawSummary.reviewed_trades) || !isFiniteNumber(rawSummary.unreviewed_closed_trades) ||
+        !isFiniteNumber(rawSummary.linked_trades) || !isFiniteNumber(rawSummary.unplanned_trades) ||
+        typeof rawSummary.sample_size_sufficient !== "boolean" ||
+        (rawSummary.review_data_status !== undefined && rawSummary.review_data_status !== "available" && rawSummary.review_data_status !== "unavailable") ||
+        !Array.isArray(rawSummary.plan_adherence) || rawSummary.plan_adherence.length !== 4) {
+      throw new Error("Journal analytics returned an invalid review summary.");
+    }
+    const plan_adherence = rawSummary.plan_adherence.map((candidate) => {
+      if (!isRecord(candidate) || typeof candidate.adherence !== "string" || !adherenceValues.has(candidate.adherence) ||
+          !isFiniteNumber(candidate.trades) || !isFiniteNumber(candidate.wins) || !isFiniteNumber(candidate.win_rate) ||
+          !isFiniteNumber(candidate.total_pnl) || !isFiniteNumber(candidate.avg_pnl)) {
+        throw new Error("Journal analytics returned an invalid review summary.");
+      }
+      return {
+        adherence: candidate.adherence as "followed" | "partial" | "not_followed" | "unknown",
+        trades: candidate.trades,
+        wins: candidate.wins,
+        win_rate: candidate.win_rate,
+        total_pnl: candidate.total_pnl,
+        avg_pnl: candidate.avg_pnl,
+      };
+    });
+    if (new Set(plan_adherence.map((row) => row.adherence)).size !== 4) {
+      throw new Error("Journal analytics returned an invalid review summary.");
+    }
+    review_summary = {
+      minimum_sample_size: rawSummary.minimum_sample_size,
+      reviewed_trades: rawSummary.reviewed_trades,
+      unreviewed_closed_trades: rawSummary.unreviewed_closed_trades,
+      linked_trades: rawSummary.linked_trades,
+      unplanned_trades: rawSummary.unplanned_trades,
+      sample_size_sufficient: rawSummary.sample_size_sufficient,
+      review_data_status: rawSummary.review_data_status === "unavailable" ? "unavailable" : "available",
+      plan_adherence,
+    };
+  }
+
+  let analysis_period: JournalAnalytics["analysis_period"];
+  if (value.analysis_period !== undefined) {
+    if (!isRecord(value.analysis_period) ||
+        (value.analysis_period.from_date !== null && typeof value.analysis_period.from_date !== "string") ||
+        (value.analysis_period.to_date !== null && typeof value.analysis_period.to_date !== "string") ||
+        !isFiniteNumber(value.analysis_period.trade_count)) {
+      throw new Error("Journal analytics returned an invalid analysis period.");
+    }
+    analysis_period = {
+      from_date: value.analysis_period.from_date,
+      to_date: value.analysis_period.to_date,
+      trade_count: value.analysis_period.trade_count,
+    };
+  }
+
+  let r_multiple_summary: JournalAnalytics["r_multiple_summary"];
+  if (value.r_multiple_summary !== undefined) {
+    const summary = value.r_multiple_summary;
+    if (!isRecord(summary) || !isFiniteNumber(summary.trades) || !isFiniteNumber(summary.available_trades) ||
+        !isFiniteNumber(summary.missing_risk_plan) || !isFiniteNumber(summary.positive_trades) ||
+        !isFiniteNumber(summary.negative_trades) || !isNullableFiniteNumber(summary.win_rate) ||
+        !isNullableFiniteNumber(summary.total_r) || !isNullableFiniteNumber(summary.expectancy_r) ||
+        !isNullableFiniteNumber(summary.avg_winner_r) || !isNullableFiniteNumber(summary.avg_loser_r)) {
+      throw new Error("Journal analytics returned an invalid R-multiple summary.");
+    }
+    r_multiple_summary = {
+      trades: summary.trades,
+      available_trades: summary.available_trades,
+      missing_risk_plan: summary.missing_risk_plan,
+      positive_trades: summary.positive_trades,
+      negative_trades: summary.negative_trades,
+      win_rate: summary.win_rate,
+      total_r: summary.total_r,
+      expectancy_r: summary.expectancy_r,
+      avg_winner_r: summary.avg_winner_r,
+      avg_loser_r: summary.avg_loser_r,
+    };
+  }
+
+  let cohort_breakdown: JournalAnalytics["cohort_breakdown"];
+  if (value.cohort_breakdown !== undefined) {
+    const breakdown = value.cohort_breakdown;
+    if (!isRecord(breakdown) || !Array.isArray(breakdown.scanner) || !breakdown.scanner.every(isCohortRow) ||
+        !Array.isArray(breakdown.sector) || !breakdown.sector.every(isCohortRow) ||
+        !Array.isArray(breakdown.holding_period) || !breakdown.holding_period.every(isCohortRow)) {
+      throw new Error("Journal analytics returned an invalid cohort breakdown.");
+    }
+    cohort_breakdown = {
+      scanner: breakdown.scanner,
+      sector: breakdown.sector,
+      holding_period: breakdown.holding_period,
+    };
+  }
+
+  let sector_context: JournalAnalytics["sector_context"];
+  if (value.sector_context !== undefined) {
+    if (!isRecord(value.sector_context) || typeof value.sector_context.status !== "string" ||
+        typeof value.sector_context.source !== "string" || typeof value.sector_context.note !== "string") {
+      throw new Error("Journal analytics returned an invalid sector context.");
+    }
+    sector_context = {
+      status: value.sector_context.status,
+      source: value.sector_context.source,
+      note: value.sector_context.note,
+    };
+  }
+
+  let mae_mfe: JournalAnalytics["mae_mfe"];
+  if (value.mae_mfe !== undefined) {
+    const summary = value.mae_mfe;
+    const isExcursion = (candidate: unknown): candidate is NonNullable<JournalAnalytics["mae_mfe"]>["trades"][number] =>
+      isRecord(candidate) && (candidate.journal_entry_id === null || typeof candidate.journal_entry_id === "string") &&
+      typeof candidate.symbol === "string" && isFiniteNumber(candidate.mae_pct) && isFiniteNumber(candidate.mfe_pct) &&
+      isNullableFiniteNumber(candidate.mae_r) && isNullableFiniteNumber(candidate.mfe_r) &&
+      isFiniteNumber(candidate.bars_count) &&
+      (candidate.basis === undefined || typeof candidate.basis === "string") &&
+      (candidate.interval === undefined || typeof candidate.interval === "string") &&
+      (candidate.source === undefined || typeof candidate.source === "string");
+    // Older backend deployments returned only {status, reason}. Treat that
+    // response as a legacy unavailable contract at this API boundary so an
+    // installed frontend does not white-screen during a rolling deployment.
+    if (isRecord(summary) && typeof summary.status === "string" && typeof summary.reason === "string" &&
+        summary.basis === undefined && summary.trades === undefined) {
+      mae_mfe = {
+        status: summary.status,
+        basis: "legacy_unavailable",
+        trades_with_path: 0,
+        trades_without_path: 0,
+        avg_mae_pct: null,
+        avg_mfe_pct: null,
+        avg_mae_r: null,
+        avg_mfe_r: null,
+        trades: [],
+        reason: summary.reason,
+      };
+    } else if (!isRecord(summary) || typeof summary.status !== "string" || typeof summary.basis !== "string" ||
+        !isFiniteNumber(summary.trades_with_path) || !isFiniteNumber(summary.trades_without_path) ||
+        (summary.intraday_trades !== undefined && !isFiniteNumber(summary.intraday_trades)) ||
+        (summary.eod_proxy_trades !== undefined && !isFiniteNumber(summary.eod_proxy_trades)) ||
+        !isNullableFiniteNumber(summary.avg_mae_pct) || !isNullableFiniteNumber(summary.avg_mfe_pct) ||
+        !isNullableFiniteNumber(summary.avg_mae_r) || !isNullableFiniteNumber(summary.avg_mfe_r) ||
+        !Array.isArray(summary.trades) || !summary.trades.every(isExcursion) || typeof summary.reason !== "string") {
+      throw new Error("Journal analytics returned an invalid MAE/MFE status.");
+    } else {
+      mae_mfe = {
+        status: summary.status,
+        basis: summary.basis,
+        trades_with_path: summary.trades_with_path,
+        trades_without_path: summary.trades_without_path,
+        intraday_trades: summary.intraday_trades,
+        eod_proxy_trades: summary.eod_proxy_trades,
+        avg_mae_pct: summary.avg_mae_pct,
+        avg_mfe_pct: summary.avg_mfe_pct,
+        avg_mae_r: summary.avg_mae_r,
+        avg_mfe_r: summary.avg_mfe_r,
+        trades: summary.trades,
+        reason: summary.reason,
+      };
+    }
+  }
+
+  return {
+    equity_curve,
+    setup_breakdown,
+    monthly_pnl,
+    drawdown_curve,
+    max_drawdown: value.max_drawdown,
+    longest_dd_days: value.longest_dd_days,
+    recovery_factor: value.recovery_factor,
+    profit_factor: value.profit_factor,
+    review_summary,
+    analysis_period,
+    r_multiple_summary,
+    cohort_breakdown,
+    sector_context,
+    mae_mfe,
+  };
+}
+
+function isSetupReviewRule(value: unknown): value is SetupReview["results"][number] {
+  return isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.label === "string" &&
+    (value.severity === "block" || value.severity === "warn" || value.severity === "check" || value.severity === "info") &&
+    (value.status === "pass" || value.status === "fail" || value.status === "not_evaluated") &&
+    typeof value.message === "string";
+}
+
+function isRulebookRule(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.label === "string" &&
+    (value.severity === "block" || value.severity === "warn" || value.severity === "check" || value.severity === "info") &&
+    isRecord(value.config) &&
+    typeof value.enabled === "boolean" &&
+    typeof value.sort_order === "number";
+}
+
+function parseRulebookResponse(value: unknown): Rulebook {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" || !Array.isArray(value.rules)) {
+    throw new Error("Rulebook returned an invalid response.");
+  }
+  const rules = value.rules.filter(isRulebookRule);
+  if (rules.length !== value.rules.length) throw new Error("Rulebook returned invalid rules.");
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    name: value.name,
+    description: typeof value.description === "string" ? value.description : null,
+    min_planned_rr: typeof value.min_planned_rr === "number" ? value.min_planned_rr : null,
+    max_risk_amount: typeof value.max_risk_amount === "number" ? value.max_risk_amount : null,
+    max_account_risk_pct: typeof value.max_account_risk_pct === "number" ? value.max_account_risk_pct : null,
+    is_default: value.is_default === true,
+    active: value.active !== false,
+    rules: rules.map((rule) => ({
+      id: typeof rule.id === "string" ? rule.id : undefined,
+      code: rule.code as string,
+      label: rule.label as string,
+      severity: rule.severity as Rulebook["rules"][number]["severity"],
+      config: rule.config as Record<string, unknown>,
+      enabled: rule.enabled as boolean,
+      sort_order: rule.sort_order as number,
+    })),
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : undefined,
+  };
+}
+
+function parseSetupReviewResponse(value: unknown): SetupReview {
+  if (!isRecord(value) || typeof value.setup_id !== "string" || typeof value.rulebook_id !== "string" ||
+      (value.overall_status !== "passed" && value.overall_status !== "warned" && value.overall_status !== "blocked") ||
+      typeof value.can_proceed !== "boolean" || typeof value.summary !== "string" || !Array.isArray(value.results)) {
+    throw new Error("Setup review returned an invalid response.");
+  }
+  const results = value.results.filter(isSetupReviewRule);
+  if (results.length !== value.results.length) throw new Error("Setup review returned invalid rule results.");
+  return {
+    setup_id: value.setup_id,
+    rulebook_id: value.rulebook_id,
+    overall_status: value.overall_status,
+    can_proceed: value.can_proceed,
+    summary: value.summary,
+    override_reason: typeof value.override_reason === "string" ? value.override_reason : null,
+    results,
+    input_snapshot: isRecord(value.input_snapshot) ? value.input_snapshot : undefined,
+    evaluated_at: typeof value.evaluated_at === "string" ? value.evaluated_at : null,
+    id: typeof value.id === "string" ? value.id : null,
+  };
+}
+
+function parseSetupResponse(value: unknown): Setup {
+  const isNullableNumber = (candidate: unknown): candidate is number | null => candidate === null || typeof candidate === "number";
+  const isNullableString = (candidate: unknown): candidate is string | null => candidate === null || typeof candidate === "string";
+  const isNullableRecord = (candidate: unknown): candidate is Record<string, unknown> | null => candidate === null || isRecord(candidate);
+
+  if (!isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.user_id !== "string" ||
+      typeof value.symbol !== "string" ||
+      (value.status !== "planned" && value.status !== "ready" && value.status !== "triggered" && value.status !== "open" && value.status !== "closed" && value.status !== "invalidated" && value.status !== "cancelled") ||
+      (value.direction !== "long" && value.direction !== "short") ||
+      (value.source !== "scanner" && value.source !== "chart" && value.source !== "watchlist" && value.source !== "manual") ||
+      !isNullableString(value.strategy_tag) ||
+      !isNullableNumber(value.entry_low) ||
+      !isNullableNumber(value.entry_high) ||
+      !isNullableNumber(value.stop_price) ||
+      !isNullableNumber(value.target_price) ||
+      !isNullableNumber(value.planned_risk_amount) ||
+      !isNullableNumber(value.planned_quantity) ||
+      !isNullableNumber(value.planned_rr) ||
+      !isNullableString(value.thesis) ||
+      !isNullableString(value.invalidation_reason) ||
+      !isNullableRecord(value.scanner_context) ||
+      !isNullableRecord(value.chart_snapshot) ||
+      typeof value.created_at !== "string" ||
+      typeof value.updated_at !== "string") {
+    throw new Error("Setup returned an invalid response.");
+  }
+
+  const reviewStatus = value.review_status === undefined || value.review_status === null
+    ? undefined
+    : value.review_status === "not_evaluated" || value.review_status === "passed" || value.review_status === "warned" || value.review_status === "blocked"
+      ? value.review_status
+      : null;
+  if (reviewStatus === null) throw new Error("Setup returned an invalid response.");
+
+  const optionalString = (candidate: unknown): string | null | undefined => {
+    if (candidate === undefined || candidate === null || typeof candidate === "string") return candidate;
+    throw new Error("Setup returned an invalid response.");
+  };
+  const sourceCandidate = optionalString(value.source_scanner_candidate_id);
+  const rulebookId = optionalString(value.rulebook_id);
+  const lastReviewedAt = optionalString(value.last_reviewed_at);
+
+  return {
+    id: value.id,
+    user_id: value.user_id,
+    symbol: value.symbol,
+    status: value.status,
+    direction: value.direction,
+    strategy_tag: value.strategy_tag,
+    entry_low: value.entry_low,
+    entry_high: value.entry_high,
+    stop_price: value.stop_price,
+    target_price: value.target_price,
+    planned_risk_amount: value.planned_risk_amount,
+    planned_quantity: value.planned_quantity,
+    planned_rr: value.planned_rr,
+    thesis: value.thesis,
+    invalidation_reason: value.invalidation_reason,
+    source: value.source,
+    source_scanner_candidate_id: sourceCandidate,
+    review_status: reviewStatus,
+    rulebook_id: rulebookId,
+    last_reviewed_at: lastReviewedAt,
+    scanner_context: value.scanner_context,
+    chart_snapshot: value.chart_snapshot,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function localSetupId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `mock-setup-${Date.now()}`;
+}
+
+function createLocalSetup(request: CreateSetupRequest): Setup {
+  const now = new Date().toISOString();
+  const entry = request.entry_low != null && request.entry_high != null
+    ? (request.entry_low + request.entry_high) / 2
+    : request.entry_low ?? request.entry_high ?? null;
+  const risk = entry != null && request.stop_price != null
+    ? Math.abs(entry - request.stop_price)
+    : null;
+  const reward = entry != null && request.target_price != null
+    ? Math.abs(request.target_price - entry)
+    : null;
+  return {
+    id: localSetupId(),
+    user_id: "mock-user",
+    symbol: request.symbol.trim().toUpperCase(),
+    status: request.status ?? "planned",
+    direction: request.direction,
+    strategy_tag: request.strategy_tag ?? null,
+    entry_low: request.entry_low ?? null,
+    entry_high: request.entry_high ?? null,
+    stop_price: request.stop_price ?? null,
+    target_price: request.target_price ?? null,
+    planned_risk_amount: risk != null && request.planned_quantity != null ? Number((risk * request.planned_quantity).toFixed(4)) : null,
+    planned_quantity: request.planned_quantity ?? null,
+    planned_rr: risk != null && risk > 0 && reward != null ? Number((reward / risk).toFixed(4)) : null,
+    thesis: request.thesis ?? null,
+    invalidation_reason: request.invalidation_reason ?? null,
+    source: request.source ?? "manual",
+    source_scanner_candidate_id: request.source_scanner_candidate_id ?? null,
+    scanner_context: request.scanner_context ?? null,
+    chart_snapshot: request.chart_snapshot ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export async function getSetups(options?: { symbol?: string; status?: SetupStatus }): Promise<Setup[]> {
+  if (shouldUseMockFallback()) {
+    const symbol = options?.symbol?.trim().toUpperCase();
+    return readLocalSetups().filter((setup) => (!symbol || setup.symbol === symbol) && (!options?.status || setup.status === options.status));
+  }
+  const headers = await authHeaders();
+  const query = new URLSearchParams();
+  if (options?.symbol) query.set("symbol", options.symbol.trim().toUpperCase());
+  if (options?.status) query.set("status", options.status);
+  const res = await fetch(`${API}/api/v1/setups${query.toString() ? `?${query}` : ""}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setups are temporarily unavailable."));
+  const data = await res.json();
+  if (!isRecord(data) || !Array.isArray(data.setups)) throw new Error("Setups returned an invalid response.");
+  return data.setups.map(parseSetupResponse);
+}
+
+export async function createSetup(request: CreateSetupRequest): Promise<Setup> {
+  if (shouldUseMockFallback()) {
+    const created = createLocalSetup(request);
+    writeLocalSetups([created, ...readLocalSetups()]);
+    invalidateClientCache(["setups"]);
+    return created;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...request, symbol: request.symbol.trim().toUpperCase() }),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup could not be saved."));
+  const created = await res.json();
+  if (!created || typeof created.id !== "string") throw new Error("Setup save returned an invalid response.");
+  invalidateClientCache(["setups"]);
+  return created as Setup;
+}
+
+export async function updateSetup(setupId: string, request: UpdateSetupRequest): Promise<Setup> {
+  if (shouldUseMockFallback()) {
+    const setups = readLocalSetups();
+    const existing = setups.find((setup) => setup.id === setupId);
+    if (!existing) throw new Error("Setup could not be found.");
+    const updated = createLocalSetup({
+      symbol: existing.symbol,
+      direction: request.direction !== undefined ? request.direction : existing.direction,
+      status: request.status !== undefined ? request.status : existing.status,
+      strategy_tag: request.strategy_tag !== undefined ? request.strategy_tag : existing.strategy_tag,
+      entry_low: request.entry_low !== undefined ? request.entry_low : existing.entry_low,
+      entry_high: request.entry_high !== undefined ? request.entry_high : existing.entry_high,
+      stop_price: request.stop_price !== undefined ? request.stop_price : existing.stop_price,
+      target_price: request.target_price !== undefined ? request.target_price : existing.target_price,
+      planned_quantity: request.planned_quantity !== undefined ? request.planned_quantity : existing.planned_quantity,
+      thesis: request.thesis !== undefined ? request.thesis : existing.thesis,
+      invalidation_reason: request.invalidation_reason !== undefined ? request.invalidation_reason : existing.invalidation_reason,
+      source: request.source !== undefined ? request.source : existing.source,
+      source_scanner_candidate_id: request.source_scanner_candidate_id !== undefined ? request.source_scanner_candidate_id : existing.source_scanner_candidate_id,
+      scanner_context: request.scanner_context !== undefined ? request.scanner_context : existing.scanner_context,
+      chart_snapshot: request.chart_snapshot !== undefined ? request.chart_snapshot : existing.chart_snapshot,
+    });
+    const next = { ...updated, id: existing.id, user_id: existing.user_id, created_at: existing.created_at };
+    writeLocalSetups(setups.map((setup) => setup.id === setupId ? next : setup));
+    invalidateClientCache(["setups"]);
+    return next;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup could not be updated."));
+  const updated = await res.json();
+  if (!updated || typeof updated.id !== "string") throw new Error("Setup update returned an invalid response.");
+  invalidateClientCache(["setups"]);
+  return updated as Setup;
+}
+
+export async function getRulebooks(): Promise<Rulebook[]> {
+  if (shouldUseMockFallback()) return readLocalRulebooks();
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/rulebooks`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Rulebooks are temporarily unavailable."));
+  const data = await res.json();
+  if (!isRecord(data) || !Array.isArray(data.rulebooks)) throw new Error("Rulebooks returned an invalid response.");
+  return data.rulebooks.map(parseRulebookResponse);
+}
+
+export async function createRulebook(request: CreateRulebookRequest): Promise<Rulebook> {
+  if (shouldUseMockFallback()) {
+    const now = new Date().toISOString();
+    const configuredRules = request.rules?.map((rule) => ({ ...rule })) ?? defaultLocalRulebook().rules.map((rule) => (
+      rule.code === "minimum_rr"
+        ? { ...rule, config: { ...rule.config, min_rr: request.min_planned_rr ?? 2 } }
+        : rule
+    ));
+    if (request.max_risk_amount != null) {
+      configuredRules.push({
+        code: "max_risk_amount",
+        label: "Maximum planned risk amount",
+        severity: "warn",
+        config: { max_risk_amount: request.max_risk_amount },
+        enabled: true,
+        sort_order: 70,
+      });
+    }
+    if (request.max_account_risk_pct != null) {
+      configuredRules.push({
+        code: "max_account_risk_pct",
+        label: "Maximum account risk percentage",
+        severity: "warn",
+        config: { max_account_risk_pct: request.max_account_risk_pct },
+        enabled: true,
+        sort_order: 80,
+      });
+    }
+    const rulebook: Rulebook = {
+      id: localSetupId(),
+      name: request.name.trim(),
+      description: request.description?.trim() || null,
+      min_planned_rr: request.min_planned_rr ?? 2,
+      max_risk_amount: request.max_risk_amount ?? null,
+      max_account_risk_pct: request.max_account_risk_pct ?? null,
+      is_default: request.is_default === true,
+      active: true,
+      rules: configuredRules,
+      created_at: now,
+      updated_at: now,
+    };
+    const existing = readLocalRulebooks();
+    const next = rulebook.is_default
+      ? existing.map((item) => ({ ...item, is_default: false }))
+      : existing;
+    writeLocalRulebooks([rulebook, ...next]);
+    return rulebook;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/rulebooks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Rulebook could not be saved."));
+  return parseRulebookResponse(await res.json());
+}
+
+export async function getSetupReview(setupId: string): Promise<SetupReview | null> {
+  if (shouldUseMockFallback()) return readLocalSetupReviews()[setupId] ?? null;
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}/review`, { headers });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup review is temporarily unavailable."));
+  return parseSetupReviewResponse(await res.json());
+}
+
+export async function reviewSetup(
+  setupId: string,
+  request: SetupReviewRequest = {},
+  localSetup?: Partial<Setup>,
+): Promise<SetupReview> {
+  if (shouldUseMockFallback()) {
+    const setup = readLocalSetups().find((item) => item.id === setupId) ?? localSetup;
+    if (!setup) throw new Error("Setup review needs a saved setup.");
+    const rulebooks = readLocalRulebooks();
+    const rulebook = (request.rulebook_id ? rulebooks.find((item) => item.id === request.rulebook_id) : undefined)
+      ?? rulebooks.find((item) => item.is_default && item.active)
+      ?? rulebooks[0]
+      ?? defaultLocalRulebook();
+    const review = evaluateSetupReview(
+      { ...setup, id: setupId },
+      { ...request, rulebook_id: rulebook.id },
+      rulebook.rules.map((rule) => ({
+        ...rule,
+        status: "not_evaluated" as const,
+        message: "",
+      })),
+    );
+    writeLocalSetupReview({ ...review, evaluated_at: new Date().toISOString() });
+    const setups = readLocalSetups().map((item) => item.id === setupId
+      ? { ...item, review_status: review.overall_status, last_reviewed_at: new Date().toISOString() }
+      : item);
+    writeLocalSetups(setups);
+    return review;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}/review`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup review could not be recorded."));
+  return parseSetupReviewResponse(await res.json());
+}
 
 function readLocalWorkflowStates(): Record<string, WorkflowState> {
   if (typeof window === "undefined") return {};
@@ -437,9 +1556,10 @@ export async function updateWatchlistItemMetadata(
 }
 
 export async function getWorkflowStates(options?: { symbols?: string[]; watchlistId?: string }): Promise<WorkflowState[]> {
-  const local = readLocalWorkflowStates();
+  const useLocalFallback = shouldUseMockFallback();
+  const local = useLocalFallback ? readLocalWorkflowStates() : {};
   const localValues = Object.values(local);
-  if (shouldUseMockFallback()) {
+  if (useLocalFallback) {
     return options?.symbols?.length
       ? localValues.filter((state) => options.symbols!.includes(state.symbol))
       : localValues;
@@ -453,7 +1573,9 @@ export async function getWorkflowStates(options?: { symbols?: string[]; watchlis
       if (normalizedSymbols.length) qs.set("symbols", normalizedSymbols.join(","));
       if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
       const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
-      if (!res.ok) return localValues;
+      if (!res.ok) {
+        throw new Error(await responseErrorMessage(res, "Workflow state is temporarily unavailable."));
+      }
       const data = await res.json();
       const remote: WorkflowState[] = data.states ?? [];
       if (remote.length) {
@@ -461,53 +1583,49 @@ export async function getWorkflowStates(options?: { symbols?: string[]; watchlis
         for (const state of remote) merged[state.symbol] = state;
         writeLocalWorkflowStates(merged);
       }
-      return remote.length ? remote : localValues;
-    } catch {
-      return localValues;
+      return remote;
+    } catch (error) {
+      if (useLocalFallback) return localValues;
+      throw error;
     }
   });
 }
 
 export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<WorkflowState> {
-  const local = saveLocalWorkflowState(patch);
-  if (shouldUseMockFallback()) return local;
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
-    });
-    if (!res.ok) return local;
-    const remote = await res.json();
-    saveLocalWorkflowState(remote);
-    invalidateClientCache(["workflow:"]);
-    return remote;
-  } catch {
-    return local;
+  if (shouldUseMockFallback()) return saveLocalWorkflowState(patch);
+
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Workflow state could not be saved."));
   }
+  const remote = await res.json();
+  invalidateClientCache(["workflow:"]);
+  return remote;
 }
 
 export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): Promise<WorkflowState[]> {
   const normalized = patches.map((patch) => ({ ...patch, symbol: patch.symbol.toUpperCase() }));
-  const local = saveLocalWorkflowStates(normalized);
-  if (shouldUseMockFallback() || normalized.length === 0) return local;
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(normalized),
-    });
-    if (!res.ok) return local;
-    const data = await res.json();
-    const remote: WorkflowState[] = data.states ?? [];
-    if (remote.length) saveLocalWorkflowStates(remote);
-    invalidateClientCache(["workflow:"]);
-    return remote.length ? remote : local;
-  } catch {
-    return local;
+  if (shouldUseMockFallback()) return saveLocalWorkflowStates(normalized);
+  if (normalized.length === 0) return [];
+
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(normalized),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Workflow state could not be saved."));
   }
+  const data = await res.json();
+  const remote: WorkflowState[] = data.states ?? [];
+  invalidateClientCache(["workflow:"]);
+  return remote;
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -1368,6 +2486,119 @@ export async function getJournalEntries(
   });
 }
 
+function parseTradeReview(value: unknown): TradeReview {
+  if (!isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.user_id !== "string" ||
+      typeof value.journal_entry_id !== "string" ||
+      (value.setup_id !== null && typeof value.setup_id !== "string") ||
+      (value.status !== "draft" && value.status !== "completed") ||
+      (value.plan_adherence !== "followed" && value.plan_adherence !== "partial" && value.plan_adherence !== "not_followed" && value.plan_adherence !== "unknown") ||
+      (value.mistakes !== null && typeof value.mistakes !== "string") ||
+      (value.lesson !== null && typeof value.lesson !== "string") ||
+      (value.follow_up !== null && typeof value.follow_up !== "string") ||
+      (value.source !== "manual" && value.source !== "generated" && value.source !== "journal_sync") ||
+      (value.reviewed_at !== null && typeof value.reviewed_at !== "string") ||
+      typeof value.created_at !== "string" ||
+      typeof value.updated_at !== "string") {
+    throw new Error("Trade review returned an invalid response.");
+  }
+  return {
+    id: value.id,
+    user_id: value.user_id,
+    journal_entry_id: value.journal_entry_id,
+    setup_id: value.setup_id,
+    status: value.status,
+    plan_adherence: value.plan_adherence,
+    mistakes: value.mistakes,
+    lesson: value.lesson,
+    follow_up: value.follow_up,
+    source: value.source,
+    reviewed_at: value.reviewed_at,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function parseTradeReviewsResponse(value: unknown): TradeReview[] {
+  if (!isRecord(value) || !Array.isArray(value.reviews)) {
+    throw new Error("Trade reviews returned an invalid response.");
+  }
+  return value.reviews.map(parseTradeReview);
+}
+
+function mockTradeReview(entry: JournalEntry): TradeReview {
+  const now = new Date().toISOString();
+  return {
+    id: entry.review?.id ?? `mock-review-${entry.id}`,
+    user_id: entry.user_id,
+    journal_entry_id: entry.id,
+    setup_id: entry.setup_id ?? null,
+    status: entry.lessons?.trim() ? "completed" : "draft",
+    plan_adherence: entry.review?.plan_adherence ?? "unknown",
+    mistakes: entry.mistakes ?? null,
+    lesson: entry.lessons ?? null,
+    follow_up: entry.review?.follow_up ?? null,
+    source: entry.review?.source ?? "journal_sync",
+    reviewed_at: entry.review?.reviewed_at ?? (entry.lessons?.trim() ? entry.updated_at : null),
+    created_at: entry.review?.created_at ?? now,
+    updated_at: entry.review?.updated_at ?? entry.updated_at,
+  };
+}
+
+export async function getJournalReviews(): Promise<TradeReview[]> {
+  if (shouldUseMockFallback()) {
+    const entries = mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries);
+    return entries
+      .filter((entry) => entry.status === "closed" && (entry.lessons?.trim() || entry.mistakes?.trim() || entry.review))
+      .map(mockTradeReview);
+  }
+  return cachedClientRequest("journal:reviews", 20_000, async () => {
+    const res = await fetch(`${API}/api/v1/journal/reviews`, { headers: await authHeaders() });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Trade reviews are temporarily unavailable (${res.status}).`));
+    }
+    return parseTradeReviewsResponse(await res.json());
+  });
+}
+
+export async function saveTradeReview(entryId: string, request: TradeReviewRequest): Promise<TradeReview> {
+  if (shouldUseMockFallback()) {
+    const updated = updateLocalJournalEntry(entryId, {
+      mistakes: request.mistakes ?? undefined,
+      lessons: request.lesson ?? undefined,
+    });
+    if (!updated) throw new Error("Entry not found");
+    const review = mockTradeReview({
+      ...updated,
+      review: {
+        ...mockTradeReview(updated),
+        plan_adherence: request.plan_adherence ?? "unknown",
+        source: request.source ?? "manual",
+        follow_up: request.follow_up ?? null,
+      },
+    });
+    const persisted = { ...updated, review };
+    writeLocalJournalEntries([
+      persisted,
+      ...readLocalJournalEntries().filter((entry) => entry.id !== entryId),
+    ]);
+    invalidateClientCache(["journal:", "portfolio"]);
+    return review;
+  }
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/review`, {
+    method: "PUT",
+    headers: await authHeaders(),
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Trade review could not be saved (${res.status}).`));
+  }
+  const review = parseTradeReview(await res.json());
+  invalidateClientCache(["journal:", "portfolio"]);
+  return review;
+}
+
 export async function getJournalStats(): Promise<JournalStats> {
   if (shouldUseMockFallback()) return mockJournalStats();
   return cachedClientRequest("journal:stats", 30_000, async () => {
@@ -1437,19 +2668,79 @@ export async function deleteJournalEntry(id: string): Promise<void> {
 }
 
 
-export async function getJournalAnalytics(): Promise<JournalAnalytics> {
+export async function getJournalAnalytics(options: { fromDate?: string; toDate?: string } = {}): Promise<JournalAnalytics> {
   if (shouldUseMockFallback()) return mockJournalAnalytics();
-  return cachedClientRequest("journal:analytics", 30_000, async () => {
+  const cacheKey = `journal:analytics:${options.fromDate ?? ""}:${options.toDate ?? ""}`;
+  return cachedClientRequest(cacheKey, 30_000, async () => {
     const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
+    const params = new URLSearchParams();
+    if (options.fromDate) params.set("from_date", options.fromDate);
+    if (options.toDate) params.set("to_date", options.toDate);
+    const query = params.toString();
+    const res = await fetch(`${API}/api/v1/journal/analytics${query ? `?${query}` : ""}`, { headers });
     if (!res.ok) {
       throw new Error(await responseErrorMessage(res, `Journal analytics are temporarily unavailable (${res.status}).`));
     }
     const data = await res.json();
     const unavailableMessage = unavailablePayloadMessage(data, "Journal analytics are temporarily unavailable.");
     if (unavailableMessage) throw new Error(unavailableMessage);
-    return data;
+    return parseJournalAnalyticsResponse(data);
   });
+}
+
+function parseIntradayPathCaptureResponse(value: unknown): CaptureJournalIntradayPathResult {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.journal_id !== "string" ||
+      typeof value.symbol !== "string" || typeof value.broker !== "string" || typeof value.interval !== "string" ||
+      typeof value.from_at !== "string" || typeof value.to_at !== "string" || !isFiniteNumber(value.bar_count) ||
+      typeof value.capture_status !== "string" || typeof value.captured_at !== "string") {
+    throw new Error("Intraday path capture returned an invalid response.");
+  }
+  return {
+    id: value.id,
+    journal_id: value.journal_id,
+    symbol: value.symbol,
+    broker: value.broker,
+    interval: value.interval,
+    from_at: value.from_at,
+    to_at: value.to_at,
+    bar_count: value.bar_count,
+    capture_status: value.capture_status,
+    captured_at: value.captured_at,
+  };
+}
+
+export async function captureJournalIntradayPath(
+  entryId: string,
+  request: CaptureJournalIntradayPathRequest = {},
+): Promise<CaptureJournalIntradayPathResult> {
+  const interval = request.interval ?? "15minute";
+  if (shouldUseMockFallback()) {
+    const now = new Date().toISOString();
+    return {
+      id: `mock-intraday-path-${entryId}-${interval}`,
+      journal_id: entryId,
+      symbol: "MOCK",
+      broker: "zerodha",
+      interval,
+      from_at: now,
+      to_at: now,
+      bar_count: 3,
+      capture_status: "available",
+      captured_at: now,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${entryId}/intraday-path`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ broker: request.broker ?? "zerodha", interval }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Intraday path capture failed (${res.status}).`));
+  }
+  const result = parseIntradayPathCaptureResponse(await res.json());
+  invalidateClientCache(["journal:analytics"]);
+  return result;
 }
 
 // ── Fundamentals ──────────────────────────────────────────────────────────────
@@ -1930,9 +3221,7 @@ export async function closePosition(
   return closed;
 }
 
-export async function importBrokerTrades(broker: BrokerImportSource = "zerodha"): Promise<{
-  imported: number; skipped: number; total_filled_orders: number; message: string; last_synced_at?: string | null
-}> {
+export async function importBrokerTrades(broker: BrokerImportSource = "zerodha"): Promise<BrokerImportResult> {
   if (shouldUseMockFallback()) {
     const now = new Date().toISOString();
     const local = readLocalJournalEntries();
@@ -1962,6 +3251,11 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
     return {
       imported,
       skipped,
+      unmatched_fills: 0,
+      unmatched_symbols: [],
+      reconciliation_status: "complete",
+      persisted_unmatched_fills: 0,
+      reconciliation_persistence: "not_needed",
       total_filled_orders: profile.orders.length,
       last_synced_at: now,
       message: `Imported ${imported} new mock trade(s) from ${profile.displayName}.`,
@@ -1973,12 +3267,46 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail?.message ?? body.detail ?? "Import failed");
   }
-  const imported = await res.json();
+  const imported = parseBrokerImportResult(await res.json());
   invalidateClientCache(["journal:", "portfolio", "broker:status"]);
   return imported;
 }
 
 export const importZerodhaTrades = () => importBrokerTrades("zerodha");
+
+export async function getBrokerFillReconciliations(
+  reconciliationStatus: "needs_review" | "linked" | "dismissed" = "needs_review",
+): Promise<BrokerFillReconciliationResponse> {
+  if (shouldUseMockFallback()) return { reconciliations: [], count: 0 };
+  const headers = await authHeaders();
+  const qs = new URLSearchParams({ reconciliation_status: reconciliationStatus });
+  const res = await fetch(`${API}/api/v1/broker/reconciliations?${qs.toString()}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Broker reconciliation history failed."));
+  }
+  return parseBrokerFillReconciliationResponse(await res.json());
+}
+
+export async function resolveBrokerFillReconciliation(
+  reconciliationId: string,
+  request: BrokerFillReconciliationResolveRequest,
+): Promise<BrokerFillReconciliation> {
+  if (shouldUseMockFallback()) {
+    throw new Error("Simulated broker imports do not require reconciliation.");
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/reconciliations/${encodeURIComponent(reconciliationId)}/resolve`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Broker reconciliation could not be saved."));
+  }
+  const resolved = parseBrokerFillReconciliation(await res.json());
+  invalidateClientCache(["journal:", "portfolio"]);
+  return resolved;
+}
 
 export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zerodha"): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
@@ -2309,6 +3637,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     ].filter(Boolean);
     const created = createLocalJournalEntry({
       symbol: order.symbol,
+      setup_id: order.setup_id ?? previousWorkflow?.setup_id ?? null,
       trade_type: side,
       entry_date: new Date().toISOString().slice(0, 10),
       entry_price: order.price,
@@ -2329,6 +3658,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       [symbol]: {
         ...(previousWorkflow ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
         symbol,
+        setup_id: order.setup_id ?? previousWorkflow?.setup_id ?? null,
         lifecycle: "open",
         source: order.source_page ?? "chart",
         entry: order.price,
@@ -2403,6 +3733,16 @@ export async function getBrokerOrderActivity(limit = 25): Promise<BrokerOrderAct
     throw new Error(await responseErrorMessage(res, `Broker activity failed (${res.status}).`));
   }
   return res.json();
+}
+
+export async function getBrokerAuditEvents(limit = 50): Promise<BrokerAuditEventResponse> {
+  if (shouldUseMockFallback()) return { events: [], count: 0 };
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/audit?limit=${limit}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Broker audit history failed (${res.status}).`));
+  }
+  return parseBrokerAuditEventResponse(await res.json());
 }
 
 // ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────
@@ -2978,8 +4318,86 @@ export async function getBrokerProfile(broker: string): Promise<BrokerProfile> {
 export async function getBrokerHoldings(broker: string): Promise<BrokerHolding[]> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/brokers/${broker}/holdings`, { headers });
-  if (!res.ok) throw new Error("Failed to fetch broker holdings");
-  return res.json();
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker holdings are temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isBrokerHolding)) {
+    throw new Error("Broker holdings are temporarily unavailable.");
+  }
+  return data;
+}
+
+function isBrokerHolding(value: unknown): value is BrokerHolding {
+  return isRecord(value) &&
+    typeof value.symbol === "string" &&
+    typeof value.exchange === "string" &&
+    typeof value.quantity === "number" &&
+    typeof value.average_price === "number" &&
+    typeof value.current_value === "number" &&
+    typeof value.pnl === "number";
+}
+
+function isBrokerPosition(value: unknown): value is BrokerPosition {
+  return isRecord(value) &&
+    typeof value.symbol === "string" &&
+    typeof value.exchange === "string" &&
+    typeof value.quantity === "number" &&
+    typeof value.average_price === "number" &&
+    typeof value.pnl === "number" &&
+    typeof value.day_pnl === "number";
+}
+
+export async function getBrokerPositions(broker: string): Promise<BrokerPosition[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/positions`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker positions are temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isBrokerPosition)) {
+    throw new Error("Broker positions are temporarily unavailable.");
+  }
+  return data;
+}
+
+function isBrokerOrder(value: unknown): value is BrokerOrderSnapshot {
+  return isRecord(value) &&
+    typeof value.broker_order_id === "string" &&
+    typeof value.symbol === "string" &&
+    (value.exchange === "NSE" || value.exchange === "BSE") &&
+    (value.side === "BUY" || value.side === "SELL") &&
+    (value.order_type === "MARKET" || value.order_type === "LIMIT" || value.order_type === "SL" || value.order_type === "SL_MARKET") &&
+    (value.product === "CNC" || value.product === "MIS" || value.product === "NRML") &&
+    (value.status === "PENDING" || value.status === "OPEN" || value.status === "PARTIAL" || value.status === "COMPLETE" || value.status === "CANCELLED" || value.status === "REJECTED") &&
+    typeof value.quantity === "number" &&
+    typeof value.filled_quantity === "number" &&
+    typeof value.average_price === "number" &&
+    (value.limit_price === null || typeof value.limit_price === "number") &&
+    (value.trigger_price === null || typeof value.trigger_price === "number") &&
+    typeof value.placed_at === "string" &&
+    typeof value.updated_at === "string" &&
+    (value.rejection_reason === null || typeof value.rejection_reason === "string");
+}
+
+function isBrokerOrderbookResponse(value: unknown): value is BrokerOrderbookResponse {
+  return isRecord(value) &&
+    (value.broker === "zerodha" || value.broker === "upstox") &&
+    Array.isArray(value.orders) &&
+    value.orders.every(isBrokerOrder) &&
+    typeof value.count === "number" &&
+    typeof value.fetched_at === "string";
+}
+
+export async function getBrokerOrders(
+  broker: "zerodha" | "upstox",
+  limit = 25,
+): Promise<BrokerOrderbookResponse> {
+  const boundedLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/orders?limit=${boundedLimit}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker orderbook is temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!isBrokerOrderbookResponse(data)) {
+    throw new Error("Broker orderbook is temporarily unavailable.");
+  }
+  return data;
 }
 
 export async function disconnectBroker(broker: string): Promise<void> {

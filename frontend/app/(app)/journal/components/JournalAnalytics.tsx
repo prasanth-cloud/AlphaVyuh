@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Card } from "@/components/ui";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
-import type { JournalAnalytics as JournalAnalyticsType, JournalEntry } from "./types";
+import type {
+  JournalAnalytics as JournalAnalyticsType,
+  JournalAnalyticsCohortRow,
+  JournalIntradayPathInterval,
+  JournalAnalyticsRange,
+  JournalEntry,
+} from "./types";
 import { JournalCalendarHeatmap } from "./JournalCalendarHeatmap";
 
 function formatCurrency(value: number | null | undefined) {
@@ -23,6 +31,13 @@ function toneForSigned(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "var(--text-secondary)";
   return value >= 0 ? "var(--gain)" : "var(--loss)";
 }
+
+const adherenceLabels = {
+  followed: "Plan followed",
+  partial: "Partially followed",
+  not_followed: "Plan not followed",
+  unknown: "Not reviewed",
+} as const;
 
 function getLastEquityValue(analytics: JournalAnalyticsType | null) {
   const curve = analytics?.equity_curve ?? [];
@@ -139,21 +154,169 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
   );
 }
 
+function CohortTable({
+  id,
+  title,
+  caption,
+  rows,
+}: {
+  id: string;
+  title: string;
+  caption: string;
+  rows: JournalAnalyticsCohortRow[];
+}) {
+  return (
+    <section data-testid={`journal-cohort-${id}`} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div>
+        <h3 className="heading-card" style={{ marginBottom: 4 }}>{title}</h3>
+        <div className="caption">{caption}</div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="caption">No closed trades in this cohort.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                {["Cohort", "Trades", "Win rate", "Avg R", "Avg P&L", "Total P&L"].map((heading) => (
+                  <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.cohort} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                  <td style={{ padding: "9px 16px 9px 0", color: "var(--text-primary)", fontWeight: 500 }}>{row.cohort}</td>
+                  <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{row.trades}</td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{formatPct(row.win_rate)}</span></td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: toneForSigned(row.avg_r_multiple) }}>{formatRatio(row.avg_r_multiple)}</span></td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: toneForSigned(row.avg_pnl) }}>{formatCurrency(row.avg_pnl)}</span></td>
+                  <td style={{ padding: "9px 0" }}><span className="mono" style={{ color: toneForSigned(row.total_pnl), fontWeight: 600 }}>{formatCurrency(row.total_pnl)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type MaeMfeRow = NonNullable<JournalAnalyticsType["mae_mfe"]>["trades"][number];
+
+function excursionBasisLabel(row: MaeMfeRow) {
+  if (row.basis === "intraday_path") {
+    return row.interval ? `${row.interval.replace("minute", "m")} path` : "Intraday path";
+  }
+  if (row.basis === "mixed_intraday_and_eod_proxy") return "Mixed";
+  return "EOD proxy";
+}
+
+function MaeMfeTable({
+  rows,
+  onCaptureIntradayPath,
+  captureLoadingId,
+}: {
+  rows: MaeMfeRow[];
+  onCaptureIntradayPath?: (entryId: string, interval: JournalIntradayPathInterval) => Promise<void>;
+  captureLoadingId?: string | null;
+}) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{ overflowX: "auto" }} data-testid="journal-mae-mfe-trades">
+      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            {["Symbol", "MAE", "MFE", "MAE in R", "MFE in R", "Basis", "Bars", "Action"].map((heading) => (
+              <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.journal_entry_id ?? row.symbol}-${index}`} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-primary)", fontWeight: 600 }}>{row.symbol}</td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--loss)" }}>{formatPct(row.mae_pct)}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{formatPct(row.mfe_pct)}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--loss)" }}>{row.mae_r == null ? "—" : `${formatRatio(row.mae_r)}R`}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{row.mfe_r == null ? "—" : `${formatRatio(row.mfe_r)}R`}</span></td>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{excursionBasisLabel(row)}</td>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{row.bars_count}</td>
+              <td style={{ padding: "9px 0" }}>
+                {onCaptureIntradayPath && row.journal_entry_id && row.basis !== "intraday_path" ? (
+                  <button
+                    type="button"
+                    data-testid={`capture-intraday-path-${row.journal_entry_id}`}
+                    disabled={captureLoadingId === row.journal_entry_id}
+                    onClick={() => void onCaptureIntradayPath(row.journal_entry_id as string, "15minute")}
+                    style={{
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-sm)",
+                      background: "transparent",
+                      color: "var(--text-secondary)",
+                      cursor: captureLoadingId === row.journal_entry_id ? "wait" : "pointer",
+                      fontSize: 11,
+                      padding: "5px 8px",
+                    }}
+                  >
+                    {captureLoadingId === row.journal_entry_id ? "Capturing…" : "Capture 15m path"}
+                  </button>
+                ) : (
+                  <span style={{ color: "var(--text-tertiary)" }}>—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 interface JournalAnalyticsProps {
   analytics: JournalAnalyticsType | null;
   analyticsError?: string | null;
+  analyticsLoading?: boolean;
+  analyticsRange?: JournalAnalyticsRange;
+  onAnalyticsRangeChange?: (range: JournalAnalyticsRange) => void;
   entries?: JournalEntry[];
   onCalendarDateSelect?: (date: string) => void;
+  onCaptureIntradayPath?: (entryId: string, interval: JournalIntradayPathInterval) => Promise<void>;
 }
 
 export function JournalAnalytics({
   analytics,
   analyticsError,
+  analyticsLoading = false,
+  analyticsRange = { fromDate: "", toDate: "" },
+  onAnalyticsRangeChange,
   entries = [],
   onCalendarDateSelect,
+  onCaptureIntradayPath,
 }: JournalAnalyticsProps) {
+  const [rangeDraft, setRangeDraft] = useState(analyticsRange);
+  const [captureLoadingId, setCaptureLoadingId] = useState<string | null>(null);
+  const { fromDate: analyticsFromDate, toDate: analyticsToDate } = analyticsRange;
+
+  useEffect(() => {
+    setRangeDraft({ fromDate: analyticsFromDate, toDate: analyticsToDate });
+  }, [analyticsFromDate, analyticsToDate]);
+
+  const invalidRange = Boolean(rangeDraft.fromDate && rangeDraft.toDate && rangeDraft.fromDate > rangeDraft.toDate);
+
+  const handleCaptureIntradayPath = async (entryId: string, interval: JournalIntradayPathInterval) => {
+    if (!onCaptureIntradayPath) return;
+    setCaptureLoadingId(entryId);
+    try {
+      await onCaptureIntradayPath(entryId, interval);
+    } finally {
+      setCaptureLoadingId(null);
+    }
+  };
+
   if (analyticsError) {
     return (
       <Card padding="lg" data-testid="journal-analytics-unavailable">
@@ -166,11 +329,15 @@ export function JournalAnalytics({
   }
 
   const summary = buildReviewSummary(analytics);
+  const reviewSummary = analytics?.review_summary;
   const hasAnalytics = Boolean(
     analytics?.setup_breakdown?.length ||
     analytics?.equity_curve?.length ||
     analytics?.monthly_pnl?.length ||
-    analytics?.drawdown_curve?.length,
+    analytics?.drawdown_curve?.length ||
+    reviewSummary ||
+    analytics?.r_multiple_summary ||
+    analytics?.cohort_breakdown,
   );
   const scoreCards = [
     {
@@ -203,6 +370,56 @@ export function JournalAnalytics({
     <div>
       <Card padding="lg">
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <section data-testid="journal-analytics-range" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14, flexWrap: "wrap", paddingBottom: 4, borderBottom: "1px solid var(--border-subtle)" }}>
+            <div>
+              <div className="label" style={{ marginBottom: 5, color: "var(--text-tertiary)" }}>Analysis window</div>
+              <div className="caption">Filter closed-trade outcomes by exit date. All metrics remain descriptive.</div>
+              {invalidRange && <div className="caption" style={{ color: "var(--loss)", marginTop: 5 }}>From date must be on or before the to date.</div>}
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <label className="caption" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                From
+                <input
+                  aria-label="Analytics from date"
+                  type="date"
+                  value={rangeDraft.fromDate}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, fromDate: event.target.value }))}
+                  style={{ minHeight: 34, padding: "6px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-1)", color: "var(--text-primary)" }}
+                />
+              </label>
+              <label className="caption" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                To
+                <input
+                  aria-label="Analytics to date"
+                  type="date"
+                  value={rangeDraft.toDate}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, toDate: event.target.value }))}
+                  style={{ minHeight: 34, padding: "6px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-1)", color: "var(--text-primary)" }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={invalidRange || analyticsLoading || !onAnalyticsRangeChange}
+                onClick={() => onAnalyticsRangeChange?.(rangeDraft)}
+                style={{ minHeight: 34, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-2)", color: "var(--text-primary)", cursor: invalidRange || analyticsLoading ? "not-allowed" : "pointer", opacity: invalidRange || analyticsLoading ? 0.6 : 1 }}
+              >
+                {analyticsLoading ? "Loading…" : "Apply"}
+              </button>
+              <button
+                type="button"
+                disabled={analyticsLoading || (!rangeDraft.fromDate && !rangeDraft.toDate)}
+                onClick={() => {
+                  const cleared = { fromDate: "", toDate: "" };
+                  setRangeDraft(cleared);
+                  onAnalyticsRangeChange?.(cleared);
+                }}
+                style={{ minHeight: 34, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", cursor: analyticsLoading ? "not-allowed" : "pointer" }}
+              >
+                Clear
+              </button>
+            </div>
+          </section>
+
           {hasAnalytics && (
             <section data-testid="journal-edge-dashboard" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -255,6 +472,155 @@ export function JournalAnalytics({
                   <div className="caption" style={{ marginTop: 5 }}>Use this month as the benchmark for setup quality and position sizing discipline.</div>
                 </div>
               </div>
+            </section>
+          )}
+
+          {reviewSummary && (
+            <section data-testid="journal-review-outcomes" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div>
+                  <h2 className="heading-card" style={{ marginBottom: 4 }}>Process adherence</h2>
+                  <div className="caption">Descriptive outcomes grouped by completed post-trade review. This is not investment advice.</div>
+                </div>
+                <div style={{ maxWidth: 360, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ marginBottom: 4, color: "var(--text-tertiary)" }}>Review sample</div>
+                  <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: reviewSummary.sample_size_sufficient ? "var(--gain)" : "var(--warn)" }}>
+                    {reviewSummary.reviewed_trades} reviewed · {reviewSummary.unreviewed_closed_trades} unreviewed
+                  </div>
+                  <div className="caption" style={{ marginTop: 5 }}>
+                    {reviewSummary.review_data_status === "unavailable"
+                      ? "Review records could not be loaded; rows are shown as not reviewed."
+                      : reviewSummary.sample_size_sufficient
+                        ? `At least ${reviewSummary.minimum_sample_size} completed reviews are available for descriptive comparison.`
+                        : (() => {
+                            const remaining = Math.max(0, reviewSummary.minimum_sample_size - reviewSummary.reviewed_trades);
+                            return `Descriptive sample only — need ${remaining} more completed review${remaining === 1 ? "" : "s"} before comparing process outcomes.`;
+                          })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="journal-edge-grid">
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>Setup-linked trades</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>{reviewSummary.linked_trades}</div>
+                  <div className="caption" style={{ marginTop: 5 }}>Closed trades retaining durable setup lineage.</div>
+                </div>
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Unplanned trades</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: reviewSummary.unplanned_trades > 0 ? "var(--warn)" : "var(--gain)" }}>{reviewSummary.unplanned_trades}</div>
+                  <div className="caption" style={{ marginTop: 5 }}>Closed trades without a valid setup lineage.</div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                      {["Plan adherence", "Trades", "Win rate", "Avg P&L", "Total P&L"].map((heading) => (
+                        <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewSummary.plan_adherence.map((row) => {
+                      const positive = row.total_pnl >= 0;
+                      return (
+                        <tr key={row.adherence} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-primary)", fontWeight: 500 }}>
+                            {adherenceLabels[row.adherence]}
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>{row.trades}</td>
+                          <td style={{ padding: "10px 16px 10px 0" }}>
+                            <span className="mono" style={{ fontWeight: 600, color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{formatPct(row.win_rate)}</span>
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0" }}>
+                            <span className="mono" style={{ color: toneForSigned(row.avg_pnl) }}>{formatCurrency(row.avg_pnl)}</span>
+                          </td>
+                          <td style={{ padding: "10px 0" }}>
+                            <span className="mono" style={{ fontWeight: 600, color: positive ? "var(--gain)" : "var(--loss)" }}>{formatCurrency(row.total_pnl)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {analytics?.r_multiple_summary && (
+            <section data-testid="journal-r-multiple" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Realised R-multiple</h2>
+                <div className="caption">P&amp;L measured against the stop risk recorded at entry. Trades without a valid stop are excluded from R calculations.</div>
+              </div>
+              <div className="journal-edge-grid">
+                {[
+                  { label: "Expectancy", value: analytics.r_multiple_summary.expectancy_r == null ? "—" : `${analytics.r_multiple_summary.expectancy_r.toFixed(2)}R`, color: toneForSigned(analytics.r_multiple_summary.expectancy_r) },
+                  { label: "Avg winner", value: analytics.r_multiple_summary.avg_winner_r == null ? "—" : `${analytics.r_multiple_summary.avg_winner_r.toFixed(2)}R`, color: "var(--gain)" },
+                  { label: "Avg loser", value: analytics.r_multiple_summary.avg_loser_r == null ? "—" : `${analytics.r_multiple_summary.avg_loser_r.toFixed(2)}R`, color: "var(--loss)" },
+                  { label: "Risk plan coverage", value: `${analytics.r_multiple_summary.available_trades}/${analytics.r_multiple_summary.trades}`, color: analytics.r_multiple_summary.missing_risk_plan === 0 ? "var(--gain)" : "var(--warn)" },
+                ].map((card) => (
+                  <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: card.color }}>{card.value}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {analytics?.cohort_breakdown && (
+            <section data-testid="journal-cohort-breakdowns" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Outcome cohorts</h2>
+                <div className="caption">Compare recorded outcomes by provenance and holding behavior. Small cohorts are descriptive only.</div>
+              </div>
+              <CohortTable id="scanner" title="Scanner provenance" caption="Groups scanner-sourced trades by the captured scan name." rows={analytics.cohort_breakdown.scanner} />
+              <CohortTable
+                id="sector"
+                title="Sector context"
+                caption={analytics.sector_context?.status === "unavailable" ? "Sector labels could not be loaded for this request." : "Uses current AlphaVyuh symbol labels; this is not benchmark attribution."}
+                rows={analytics.cohort_breakdown.sector}
+              />
+              <CohortTable id="holding-period" title="Holding period" caption="Groups trades by recorded holding days." rows={analytics.cohort_breakdown.holding_period} />
+              {analytics.mae_mfe && (
+                <section data-testid="journal-mae-mfe" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <h3 className="heading-card" style={{ marginBottom: 4 }}>MAE / MFE</h3>
+                    <div className="caption">
+                      {analytics.mae_mfe.intraday_trades
+                        ? "Persisted broker intraday paths are used where available; missing trades use the daily OHLCV proxy."
+                        : "Daily OHLCV highs and lows are an EOD proxy, not an intraday execution path. Capture a connected Zerodha path to improve coverage."}
+                    </div>
+                  </div>
+                  <div className="caption" style={{ color: analytics.mae_mfe.status === "available" ? "var(--gain)" : "var(--warn)" }}>
+                    {analytics.mae_mfe.status === "available" ? "Coverage complete" : analytics.mae_mfe.status === "partial" ? "Partial coverage" : "Coverage unavailable"}
+                  </div>
+                  <div className="journal-edge-grid">
+                    {[
+                      { label: "Avg MAE", value: formatPct(analytics.mae_mfe.avg_mae_pct), color: "var(--loss)" },
+                      { label: "Avg MFE", value: formatPct(analytics.mae_mfe.avg_mfe_pct), color: "var(--gain)" },
+                      { label: "Avg MAE in R", value: analytics.mae_mfe.avg_mae_r == null ? "—" : `${analytics.mae_mfe.avg_mae_r.toFixed(2)}R`, color: "var(--loss)" },
+                      { label: "Avg MFE in R", value: analytics.mae_mfe.avg_mfe_r == null ? "—" : `${analytics.mae_mfe.avg_mfe_r.toFixed(2)}R`, color: "var(--gain)" },
+                    ].map((card) => (
+                      <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                        <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
+                        <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: card.color }}>{card.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="caption">
+                    {analytics.mae_mfe.trades_with_path} trade paths available · {analytics.mae_mfe.trades_without_path} missing · {analytics.mae_mfe.reason}
+                  </div>
+                  <MaeMfeTable
+                    rows={analytics.mae_mfe.trades}
+                    onCaptureIntradayPath={onCaptureIntradayPath ? handleCaptureIntradayPath : undefined}
+                    captureLoadingId={captureLoadingId}
+                  />
+                </section>
+              )}
             </section>
           )}
 

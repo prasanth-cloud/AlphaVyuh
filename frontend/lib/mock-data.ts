@@ -491,6 +491,68 @@ export function mockJournalAnalytics(): JournalAnalytics {
     longest_dd_days: 11,
     recovery_factor: 9.25,
     profit_factor: 2.4,
+    review_summary: {
+      minimum_sample_size: 5,
+      reviewed_trades: 4,
+      unreviewed_closed_trades: 14,
+      linked_trades: 16,
+      unplanned_trades: 2,
+      sample_size_sufficient: false,
+      review_data_status: "available",
+      plan_adherence: [
+        { adherence: "followed", trades: 10, wins: 7, win_rate: 70, total_pnl: 38200, avg_pnl: 3820 },
+        { adherence: "partial", trades: 2, wins: 1, win_rate: 50, total_pnl: 4200, avg_pnl: 2100 },
+        { adherence: "not_followed", trades: 2, wins: 0, win_rate: 0, total_pnl: -6400, avg_pnl: -3200 },
+        { adherence: "unknown", trades: 4, wins: 2, win_rate: 50, total_pnl: 22000, avg_pnl: 5500 },
+      ],
+    },
+    analysis_period: { from_date: null, to_date: null, trade_count: 24 },
+    r_multiple_summary: {
+      trades: 24,
+      available_trades: 21,
+      missing_risk_plan: 3,
+      positive_trades: 13,
+      negative_trades: 8,
+      win_rate: 61.9,
+      total_r: 18.4,
+      expectancy_r: 0.88,
+      avg_winner_r: 2.14,
+      avg_loser_r: -1.17,
+    },
+    cohort_breakdown: {
+      scanner: [
+        { cohort: "Trend Template", trades: 10, wins: 7, win_rate: 70, total_pnl: 38200, avg_pnl: 3820, avg_r_multiple: 1.24, reviewed_trades: 4 },
+        { cohort: "Not scanner-sourced", trades: 14, wins: 8, win_rate: 57.1, total_pnl: 30220, avg_pnl: 2158.57, avg_r_multiple: 0.61, reviewed_trades: 0 },
+      ],
+      sector: [
+        { cohort: "IT Services", trades: 8, wins: 6, win_rate: 75, total_pnl: 21400, avg_pnl: 2675, avg_r_multiple: 1.11, reviewed_trades: 2 },
+        { cohort: "Energy", trades: 6, wins: 4, win_rate: 66.7, total_pnl: 18400, avg_pnl: 3066.67, avg_r_multiple: 0.96, reviewed_trades: 1 },
+      ],
+      holding_period: [
+        { cohort: "Short (1–3d)", trades: 8, wins: 6, win_rate: 75, total_pnl: 24200, avg_pnl: 3025, avg_r_multiple: 1.18, reviewed_trades: 2 },
+        { cohort: "Swing (4–10d)", trades: 12, wins: 7, win_rate: 58.3, total_pnl: 31620, avg_pnl: 2635, avg_r_multiple: 0.72, reviewed_trades: 2 },
+      ],
+    },
+    sector_context: {
+      status: "available",
+      source: "stock_universe.sector",
+      note: "Mock sector labels are workflow QA data only.",
+    },
+    mae_mfe: {
+      status: "available",
+      basis: "daily_ohlcv_eod_proxy",
+      trades_with_path: 21,
+      trades_without_path: 3,
+      avg_mae_pct: -2.4,
+      avg_mfe_pct: 5.8,
+      avg_mae_r: -0.72,
+      avg_mfe_r: 1.64,
+      trades: [
+        { journal_entry_id: "j1", symbol: "DIXON", mae_pct: -1.8, mfe_pct: 4.5, mae_r: -0.55, mfe_r: 1.4, bars_count: 8 },
+        { journal_entry_id: "j3", symbol: "PERSISTENT", mae_pct: -3.1, mfe_pct: 6.2, mae_r: -0.89, mfe_r: 1.88, bars_count: 12 },
+      ],
+      reason: "EOD high/low proxy; intraday excursion is not available.",
+    },
   };
 }
 

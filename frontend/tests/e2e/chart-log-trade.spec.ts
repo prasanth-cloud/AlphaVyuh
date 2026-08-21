@@ -8,7 +8,7 @@ test.describe("Chart → Log trade prefill", () => {
     const logBtn = page.getByTestId("chart-log-trade-button");
     await expect(logBtn).toBeVisible({ timeout: 5_000 });
 
-    const [response] = await Promise.all([
+    await Promise.all([
       page.waitForURL(/\/journal\?prefill=1&symbol=RELIANCE/, { timeout: 10_000 }),
       logBtn.click(),
     ]);

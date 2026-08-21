@@ -196,6 +196,16 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
         rows_ingested=row.get("last_bhavcopy_rows"),
         error_message=row.get("last_bhavcopy_error"),
     )
+    bhavcopy["quality"] = {
+        "status": row.get("last_bhavcopy_quality_status"),
+        "source_rows": row.get("last_bhavcopy_source_rows"),
+        "accepted_rows": row.get("last_bhavcopy_accepted_rows"),
+        "filtered_series_rows": row.get("last_bhavcopy_filtered_series_rows"),
+        "missing_required_rows": row.get("last_bhavcopy_missing_required_rows"),
+        "invalid_ohlcv_rows": row.get("last_bhavcopy_invalid_ohlcv_rows"),
+        "duplicate_rows": row.get("last_bhavcopy_duplicate_rows"),
+        "reasons": row.get("last_bhavcopy_quality_reasons") or [],
+    }
     indicator_coverage = indicator_coverage_summary(
         symbols_latest=symbols_latest,
         null_rsi_latest=row.get("null_rsi_latest"),
@@ -227,6 +237,7 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
             "source_url": row.get("last_bhavcopy_source_url"),
             "error_message": bhavcopy["error_message"],
             "warning_message": bhavcopy["warning_message"],
+            "quality": bhavcopy["quality"],
         },
         "provider": eod_source_metadata(
             as_of=latest_trade_date,

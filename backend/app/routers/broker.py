@@ -18,12 +18,13 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Literal, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.brokers.adapter import (
     BrokerCredentials,
     BrokerError,
@@ -45,7 +46,8 @@ from app.brokers.oauth_state import (
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
-from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
+from app.services.supabase import get_admin_client, get_user_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
+from app.services.audit_log import AuditLogUnavailable, record_audit_event, record_broker_audit_event, sanitize_audit_metadata
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -55,12 +57,16 @@ router = APIRouter(prefix="/api/v1", tags=["orders"])
 BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
 ORDER_INTENT_MARKER = "alphavyuh-order-intent"
 BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
+IMPORT_MATCHABLE_SETUP_STATUSES = {"planned", "ready", "triggered", "open"}
+LIVE_ORDER_SETUP_STATUSES = {"ready", "triggered", "open"}
+UNPLANNED_SETUP_TYPE = "unplanned"
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class PlaceOrderRequest(BaseModel):
     symbol:      str
+    setup_id:    Optional[UUID] = None
     side:        Literal["buy", "sell"]
     quantity:    int = Field(gt=0)
     price:       float = Field(gt=0)
@@ -88,6 +94,13 @@ class ClosePositionRequest(BaseModel):
     journal_id:  str
     exit_price:  float = Field(gt=0)
     exit_reason: Optional[str] = None
+
+
+class BrokerFillReconciliationResolveRequest(BaseModel):
+    action: Literal["link", "dismiss"]
+    journal_id: UUID | None = None
+    setup_id: UUID | None = None
+    resolution_note: str | None = Field(default=None, max_length=500)
 
 
 # ── Broker helpers ────────────────────────────────────────────────────────────
@@ -310,6 +323,7 @@ def _record_broker_order(
     broker: str,
     broker_order_id: str | None,
     journal_id: str | None,
+    setup_id: str | None,
     symbol: str,
     side: str,
     quantity: int,
@@ -327,6 +341,7 @@ def _record_broker_order(
                 "broker": broker,
                 "broker_order_id": broker_order_id,
                 "journal_id": journal_id,
+                "setup_id": setup_id,
                 "symbol": symbol,
                 "exchange": "NSE",
                 "side": "BUY" if side == "buy" else "SELL",
@@ -434,6 +449,7 @@ def _existing_broker_order_response(body: PlaceOrderRequest, row: dict) -> dict:
             "no second broker order was submitted."
         ),
         "journal_id": journal_id,
+        "setup_id": row.get("setup_id") or raw.get("setup_id"),
         "journal_status": "open" if journal_id else None,
         "next_actions": [
             "No second broker order was submitted.",
@@ -469,6 +485,7 @@ def _existing_order_response(body: PlaceOrderRequest, entry: dict) -> dict:
         "risk_reward": entry.get("risk_reward"),
         "message": "This order intent was already recorded. Reusing the existing Journal entry.",
         "journal_id": journal_id,
+        "setup_id": entry.get("setup_id"),
         "journal_status": str(entry.get("status") or "open"),
         "next_actions": [
             "No second broker order or Journal entry was created.",
@@ -596,6 +613,31 @@ def _smoke_metadata(*, broker: str, passed: bool, checked_at: str, checks: dict[
     }
 
 
+def _record_read_only_smoke_audit(
+    *,
+    user_id: str,
+    broker: str,
+    passed: bool,
+    checked_at: str,
+    checks: dict[str, dict],
+) -> None:
+    record_broker_audit_event(
+        user_id=user_id,
+        event_type="broker.read_only_smoke.completed",
+        outcome="recorded" if passed else "failed",
+        actor_type="system",
+        broker=broker,
+        metadata={
+            "passed": passed,
+            "checked_at": checked_at,
+            "checks": {
+                name: {key: value for key, value in check.items() if key in {"ok", "count", "error", "note"}}
+                for name, check in checks.items()
+            },
+        },
+    )
+
+
 def _get_stored_credential(user_id: str, broker: str, key_name: str) -> str | None:
     try:
         return get_broker_credential(user_id, broker, key_name)
@@ -642,9 +684,9 @@ def _token_is_expired(expires_at: str | None) -> bool:
 
 def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
     try:
-        return (
+        workflow = (
             sb.table("workflow_states")
-            .select("setup_type,scanner_context")
+            .select("source,setup_id,setup_type,scanner_context,thesis,invalidation_rule")
             .eq("user_id", user_id)
             .eq("symbol", symbol)
             .maybe_single()
@@ -653,18 +695,384 @@ def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
         )
     except Exception:
         return {}
+    setup_id = workflow.get("setup_id")
+    if setup_id and _owned_setup_id_for_symbol(sb, user_id, str(setup_id), symbol):
+        return workflow
+
+    # A stale symbol-keyed workflow state must not cause a fill to inherit a
+    # setup that no longer belongs to the user. Fall through to the stricter
+    # unambiguous active-setup lookup instead.
+    workflow_without_setup = {**workflow, "setup_id": None}
+    candidate = _unambiguous_active_setup_for_import(sb, user_id, symbol)
+    if not candidate:
+        return workflow_without_setup
+
+    return {
+        **workflow_without_setup,
+        "setup_id": str(candidate["id"]),
+        "setup_type": workflow.get("setup_type") or candidate.get("strategy_tag"),
+        "scanner_context": workflow.get("scanner_context") or candidate.get("scanner_context"),
+        "thesis": workflow.get("thesis") or candidate.get("thesis"),
+        "invalidation_rule": workflow.get("invalidation_rule") or candidate.get("invalidation_reason"),
+    }
+
+
+def _unambiguous_active_setup_for_import(sb, user_id: str, symbol: str) -> dict[str, Any] | None:
+    """Return one active owner setup, or None when matching would be ambiguous."""
+    try:
+        result = (
+            sb.table("setups")
+            .select("id,symbol,status,strategy_tag,scanner_context,thesis,invalidation_reason")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol.upper())
+            .order("updated_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        rows = result.data or []
+    except Exception:
+        logger.debug("Unable to find a durable setup for imported %s", symbol, exc_info=True)
+        return None
+
+    if isinstance(rows, dict):
+        rows = [rows]
+    active = [
+        row for row in rows
+        if isinstance(row, dict)
+        and row.get("id")
+        and str(row.get("status") or "").lower() in IMPORT_MATCHABLE_SETUP_STATUSES
+    ]
+    return active[0] if len(active) == 1 else None
+
+
+def _owned_setup_id_for_symbol(sb, user_id: str, setup_id: str, symbol: str) -> str | None:
+    try:
+        setup = (
+            sb.table("setups")
+            .select("id,symbol")
+            .eq("id", setup_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception:
+        return None
+    if not setup or str(setup.get("symbol") or "").upper() != symbol.upper():
+        return None
+    return str(setup.get("id"))
+
+
+def _require_live_setup_review(sb, user_id: str, setup_row: dict[str, Any]) -> None:
+    """Fail closed unless the durable setup is active and its latest review allows it."""
+    setup_status = str(setup_row.get("status") or "").lower()
+    if setup_status not in LIVE_ORDER_SETUP_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a setup in READY, TRIGGERED, or OPEN state.",
+        )
+
+    review_status = str(setup_row.get("review_status") or "not_evaluated").lower()
+    if review_status not in {"passed", "warned"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a completed setup review with a passing or acknowledged warning.",
+        )
+    reviewed_at_raw = setup_row.get("last_reviewed_at")
+    try:
+        reviewed_at = datetime.fromisoformat(str(reviewed_at_raw).replace("Z", "+00:00"))
+        if reviewed_at.tzinfo is None:
+            reviewed_at = reviewed_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a current setup review timestamp. Re-run the review before confirming.",
+        )
+
+    try:
+        evaluation = (
+            sb.table("setup_rule_evaluations")
+            .select("can_proceed,overall_status,override_reason,evaluated_at")
+            .eq("user_id", user_id)
+            .eq("setup_id", str(setup_row["id"]))
+            .order("evaluated_at", desc=True)
+            .limit(1)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Setup review is temporarily unavailable. The order was not submitted.",
+        ) from exc
+
+    try:
+        evaluated_at = datetime.fromisoformat(str(evaluation.get("evaluated_at")).replace("Z", "+00:00")) if evaluation else None
+        if evaluated_at is not None and evaluated_at.tzinfo is None:
+            evaluated_at = evaluated_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        evaluated_at = None
+
+    if (
+        not evaluation
+        or evaluation.get("can_proceed") is not True
+        or str(evaluation.get("overall_status") or "").lower() != review_status
+        or evaluated_at is None
+        or evaluated_at != reviewed_at
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The latest setup review is missing, stale, or does not allow a live broker order. Re-run the review before confirming.",
+        )
 
 
 def _journal_enrichment_from_workflow(workflow: dict) -> dict:
     scanner_context = workflow.get("scanner_context")
     setup_type = workflow.get("setup_type")
     enrichment: dict[str, Any] = {}
-    if setup_type:
-        enrichment["setup_type"] = setup_type
+    setup_id = workflow.get("setup_id")
+    if setup_id:
+        enrichment["setup_id"] = setup_id
+        if setup_type:
+            enrichment["setup_type"] = setup_type
+    else:
+        # A broker fill without a validated durable setup is still useful,
+        # but it must be visible as unplanned in journal/review analytics.
+        enrichment["setup_type"] = UNPLANNED_SETUP_TYPE
+    for field in ("thesis", "invalidation_rule"):
+        value = workflow.get(field)
+        if isinstance(value, str) and value.strip():
+            enrichment[field] = value
     if isinstance(scanner_context, dict):
         enrichment["scanner_context"] = scanner_context
     enrichment["source_page"] = "broker-import"
     return enrichment
+
+
+def _bounded_import_symbols(symbols: list[str], limit: int = 20) -> list[str]:
+    """Keep import reconciliation metadata useful without storing broker payloads."""
+    return list(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))[:limit]
+
+
+BROKER_RECONCILIATION_SELECT = (
+    "id,broker,broker_order_id,symbol,side,filled_quantity,average_price,"
+    "executed_at,status,setup_id,journal_id,resolution_note,last_seen_at,created_at,updated_at"
+)
+BROKER_RECONCILIATION_RESOLVED_STATUSES = {"linked", "dismissed"}
+INDIA_TIMEZONE = ZoneInfo("Asia/Kolkata")
+
+
+def _broker_import_executed_at(value: Any, *, naive_timezone=timezone.utc) -> str | None:
+    """Normalize provider timestamps without retaining raw broker responses."""
+    if value is None:
+        return None
+    try:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=naive_timezone)
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _broker_reconciliation_response(row: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the bounded, non-secret reconciliation contract."""
+    try:
+        average_price = float(row.get("average_price"))
+    except (TypeError, ValueError):
+        average_price = 0.0
+    try:
+        filled_quantity = int(row.get("filled_quantity"))
+    except (TypeError, ValueError):
+        filled_quantity = 0
+    return {
+        "id": row.get("id"),
+        "broker": row.get("broker"),
+        "broker_order_id": row.get("broker_order_id"),
+        "symbol": str(row.get("symbol") or "").upper(),
+        "side": str(row.get("side") or "").upper(),
+        "filled_quantity": filled_quantity,
+        "average_price": average_price,
+        "executed_at": row.get("executed_at"),
+        "status": row.get("status"),
+        "setup_id": row.get("setup_id"),
+        "journal_id": row.get("journal_id"),
+        "resolution_note": row.get("resolution_note"),
+        "last_seen_at": row.get("last_seen_at"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _broker_fill_reconciliation_status(
+    sb,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+) -> str | None:
+    """Read the durable state for one provider order; fail soft on older schemas."""
+    try:
+        row = (
+            sb.table("broker_fill_reconciliations")
+            .select("id,status")
+            .eq("user_id", user_id)
+            .eq("broker", broker)
+            .eq("broker_order_id", broker_order_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        return str(row.get("status")) if isinstance(row, dict) and row.get("status") else None
+    except Exception:
+        logger.debug(
+            "Broker reconciliation table unavailable while checking %s/%s for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+        return None
+
+
+def _upsert_unmatched_broker_fill(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+    symbol: str,
+    side: str,
+    filled_quantity: int,
+    average_price: float,
+    executed_at: str | None,
+) -> bool:
+    """Persist one unmatched fill without overwriting a resolved decision."""
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "user_id": user_id,
+        "broker": broker,
+        "broker_order_id": broker_order_id,
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "filled_quantity": filled_quantity,
+        "average_price": average_price,
+        "executed_at": executed_at,
+        "status": "needs_review",
+        "last_seen_at": now,
+    }
+    try:
+        existing = (
+            sb.table("broker_fill_reconciliations")
+            .select("id,status")
+            .eq("user_id", user_id)
+            .eq("broker", broker)
+            .eq("broker_order_id", broker_order_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if isinstance(existing, dict) and existing.get("id"):
+            updates = {
+                "symbol": symbol.upper(),
+                "side": side.upper(),
+                "filled_quantity": filled_quantity,
+                "average_price": average_price,
+                "executed_at": executed_at,
+                "last_seen_at": now,
+            }
+            if str(existing.get("status") or "") not in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+                updates["status"] = "needs_review"
+            sb.table("broker_fill_reconciliations").update(updates).eq(
+                "id", existing["id"]
+            ).eq("user_id", user_id).execute()
+            return True
+
+        inserted = sb.table("broker_fill_reconciliations").insert(payload).execute()
+        return bool(getattr(inserted, "data", None) is not None)
+    except Exception:
+        # The import still reports the unmatched fill when an older deployment
+        # has not applied the additive migration yet. The response explicitly
+        # marks the reconciliation persistence as unavailable in that case.
+        logger.warning(
+            "Unable to persist unmatched %s fill %s for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+        return False
+
+
+def _mark_broker_fill_reconciliation_linked(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+    journal_id: str,
+) -> None:
+    """Close the durable reconciliation loop when a later import finds a journal row."""
+    try:
+        sb.table("broker_fill_reconciliations").update({
+            "status": "linked",
+            "journal_id": journal_id,
+            "resolution_note": "Matched automatically to an existing journal position during broker import.",
+            "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("user_id", user_id).eq("broker", broker).eq(
+            "broker_order_id", broker_order_id
+        ).eq("status", "needs_review").execute()
+    except Exception:
+        logger.warning(
+            "Unable to mark broker reconciliation %s/%s as linked for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+
+
+def _broker_import_result(
+    *,
+    broker: str,
+    imported: int,
+    skipped: int,
+    unmatched_fills: int,
+    unmatched_symbols: list[str],
+    persisted_unmatched_fills: int,
+    total_filled_orders: int,
+    last_synced_at: str,
+) -> dict[str, Any]:
+    reconciliation_status = "needs_review" if unmatched_fills else "complete"
+    reconciliation_persistence = (
+        "not_needed"
+        if not unmatched_fills
+        else "available"
+        if persisted_unmatched_fills == unmatched_fills
+        else "unavailable"
+    )
+    message = f"Imported {imported} new trade(s) from {broker}."
+    if unmatched_fills:
+        message += f" {unmatched_fills} filled order(s) need reconciliation because no open journal entry matched."
+        if reconciliation_persistence == "available":
+            message += " Reconciliation records were saved for later review."
+        else:
+            message += " Reconciliation records could not be saved; resolve this result before leaving the page."
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "unmatched_fills": unmatched_fills,
+        "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+        "reconciliation_status": reconciliation_status,
+        "persisted_unmatched_fills": persisted_unmatched_fills,
+        "reconciliation_persistence": reconciliation_persistence,
+        "total_filled_orders": total_filled_orders,
+        "last_synced_at": last_synced_at,
+        "message": message,
+    }
 
 
 def _fifo_close_open_long(
@@ -673,7 +1081,7 @@ def _fifo_close_open_long(
     symbol: str,
     exit_price: float,
     exit_reason: str,
-) -> bool:
+) -> str | None:
     open_res = (
         sb.table("trade_journal")
         .select("*")
@@ -687,7 +1095,7 @@ def _fifo_close_open_long(
         .execute()
     )
     if not open_res.data:
-        return False
+        return None
 
     entry = open_res.data[0]
     entry_price = float(entry["entry_price"])
@@ -715,8 +1123,9 @@ def _fifo_close_open_long(
         "source": "broker-import",
         "lifecycle": "closed",
         "journal_id": entry["id"],
+        "setup_id": entry.get("setup_id"),
     })
-    return True
+    return str(entry["id"])
 
 
 def _import_already_recorded(sb, user_id: str, marker: str) -> bool:
@@ -850,6 +1259,16 @@ async def place_order(
                 "upgrade_url": "/settings/billing",
             },
         )
+    if body.live_confirmed and not body.setup_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a server-validated durable setup before confirmation.",
+        )
+    if body.live_confirmed and not body.idempotency_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a caller-generated idempotency key before confirmation.",
+        )
 
     # Validate symbol
     sym_check = sb.table("stock_universe").select("symbol, company_name, isin") \
@@ -860,6 +1279,47 @@ async def place_order(
     company_name = sym_check.data.get("company_name", sym)
     isin = sym_check.data.get("isin")
 
+    if body.setup_id:
+        try:
+            setup_row = (
+                sb.table("setups")
+                .select("id,symbol,status,review_status,last_reviewed_at")
+                .eq("id", str(body.setup_id))
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Setup lineage is temporarily unavailable. The order was not submitted.",
+            ) from exc
+        if not setup_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setup not found")
+        if str(setup_row.get("symbol") or "").upper() != sym:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Setup symbol does not match the order symbol")
+        if body.live_confirmed:
+            _require_live_setup_review(sb, user_id, setup_row)
+
+    workflow_context = {}
+    try:
+        workflow_context = (
+            sb.table("workflow_states")
+            .select("source,setup_type,setup_id,thesis,invalidation_rule,scanner_context,notes")
+            .eq("user_id", user_id)
+            .eq("symbol", sym)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+    except Exception:
+        workflow_context = {}
+    inherited_setup_id = workflow_context.get("setup_id")
+    if not body.setup_id and inherited_setup_id:
+        if _owned_setup_id_for_symbol(sb, user_id, str(inherited_setup_id), sym) is None:
+            workflow_context = {**workflow_context, "setup_id": None}
+
     existing_broker_order = _existing_broker_order(sb, user_id, intent_key)
     if existing_broker_order:
         if not _broker_order_intent_matches(body, existing_broker_order):
@@ -867,6 +1327,18 @@ async def place_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This order intent key is already attached to a different order recorded by the broker. Submit the changed order as a new intent.",
             )
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.deduplicated",
+            outcome="deduplicated",
+            broker=str(existing_broker_order.get("broker") or "") or None,
+            broker_order_id=str(existing_broker_order.get("broker_order_id") or "") or None,
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            journal_id=str(existing_broker_order.get("journal_id")) if existing_broker_order.get("journal_id") else None,
+            metadata={"symbol": sym, "side": body.side.upper(), "quantity": body.quantity},
+        )
         return _existing_broker_order_response(body, existing_broker_order)
 
     existing_journal = _existing_order_journal(sb, user_id, intent_key)
@@ -876,7 +1348,42 @@ async def place_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This order intent key is already attached to a different order. Submit the changed order as a new intent.",
             )
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.deduplicated",
+            outcome="deduplicated",
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            journal_id=str(existing_journal.get("id")) if existing_journal.get("id") else None,
+            metadata={"symbol": sym, "side": body.side.upper(), "quantity": body.quantity},
+        )
         return _existing_order_response(body, existing_journal)
+
+    if body.live_confirmed:
+        try:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.intent.accepted",
+                outcome="accepted",
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={
+                    "symbol": sym,
+                    "side": body.side.upper(),
+                    "quantity": body.quantity,
+                    "order_type": body.order_type.upper(),
+                    "price": body.price,
+                    "source_page": body.source_page,
+                },
+                required=True,
+            )
+        except AuditLogUnavailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Broker audit logging is temporarily unavailable. The order was not submitted.",
+            ) from exc
 
     # Try real broker if connected and explicitly enabled for a future release.
     broker_order_id: str | None = None
@@ -891,6 +1398,36 @@ async def place_order(
 
     if bt:
         live_ready = bool(creds.get("api_key") and creds.get("access_token") and not _token_is_expired(creds.get("expires_at")))
+        if body.live_confirmed and bt not in {"zerodha", "upstox"}:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.submission_failed",
+                outcome="failed",
+                broker=str(bt),
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={"symbol": sym, "reason": "unsupported_broker"},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Live {bt} order placement is not supported. No simulated order was created.",
+            )
+        if body.live_confirmed and not live_ready:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.submission_failed",
+                outcome="failed",
+                broker=str(bt),
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={"symbol": sym, "reason": "credentials_unavailable_or_expired"},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Live {bt} credentials are unavailable or expired. No simulated order was created.",
+            )
         if live_ready and not body.live_confirmed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -922,6 +1459,16 @@ async def place_order(
                 )
             except BrokerError as exc:
                 logger.error("Zerodha adapter order failed for user %s: %s", user_id, exc)
+                record_audit_event(
+                    sb,
+                    user_id=user_id,
+                    event_type="broker.order.submission_failed",
+                    outcome="failed",
+                    broker="zerodha",
+                    idempotency_key=intent_key,
+                    setup_id=str(body.setup_id) if body.setup_id else None,
+                    metadata={"symbol": sym, "error_kind": exc.kind},
+                )
                 if exc.kind == "INVALID_REQUEST":
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
                 raise HTTPException(
@@ -958,6 +1505,16 @@ async def place_order(
                 )
             except BrokerError as exc:
                 logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
+                record_audit_event(
+                    sb,
+                    user_id=user_id,
+                    event_type="broker.order.submission_failed",
+                    outcome="failed",
+                    broker="upstox",
+                    idempotency_key=intent_key,
+                    setup_id=str(body.setup_id) if body.setup_id else None,
+                    metadata={"symbol": sym, "error_kind": exc.kind},
+                )
                 if exc.kind == "INVALID_REQUEST":
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
                 raise HTTPException(
@@ -973,6 +1530,20 @@ async def place_order(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
             )
+    elif body.live_confirmed:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.submission_failed",
+            outcome="failed",
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            metadata={"symbol": sym, "reason": "broker_credentials_unavailable"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live broker credentials are unavailable. No simulated order was created.",
+        )
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -988,20 +1559,6 @@ async def place_order(
         "upstox": "Upstox",
     }.get(broker_used, broker_used.capitalize())
 
-    workflow_context = {}
-    try:
-        workflow_context = (
-            sb.table("workflow_states")
-            .select("source,setup_type,thesis,invalidation_rule,scanner_context,notes")
-            .eq("user_id", user_id)
-            .eq("symbol", sym)
-            .maybe_single()
-            .execute()
-            .data or {}
-        )
-    except Exception:
-        workflow_context = {}
-
     source_context = (body.source_context or "").strip()
     scanner_context = body.scanner_context or workflow_context.get("scanner_context")
     if body.chart_snapshot:
@@ -1010,6 +1567,7 @@ async def place_order(
     thesis = body.thesis or workflow_context.get("thesis")
     invalidation_rule = body.invalidation_rule or workflow_context.get("invalidation_rule")
     setup_type = body.setup_type or workflow_context.get("setup_type")
+    setup_id = str(body.setup_id) if body.setup_id else workflow_context.get("setup_id")
     source_page = body.source_page or workflow_context.get("source") or "chart"
     if source_page not in {"chart", "watchlist", "scanner", "manual"}:
         source_page = "chart"
@@ -1068,6 +1626,7 @@ async def place_order(
         "stop_loss":      body.stop_loss,
         "target_price":   body.target_price,
         "setup_type":     setup_type,
+        "setup_id":       setup_id,
         "entry_reason":   entry_reason,
         "risk_reward":    risk_reward,
         "source_page":    source_page,
@@ -1103,6 +1662,7 @@ async def place_order(
         broker=broker_used,
         broker_order_id=broker_order_id,
         journal_id=journal_entry.get("id") if journal_entry else None,
+        setup_id=setup_id,
         symbol=sym,
         side=body.side,
         quantity=body.quantity,
@@ -1115,12 +1675,32 @@ async def place_order(
             "broker": broker_used,
             "broker_order_id": broker_order_id,
             "journal_id": journal_entry.get("id") if journal_entry else None,
+            "setup_id": setup_id,
             "live_confirmed": body.live_confirmed,
             "execution_status": execution_status,
             "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
             "average_fill_price": broker_order.average_price if broker_order else body.price,
             "rejection_reason": broker_order.rejection_reason if broker_order else None,
             "journal_draft": entry,
+        },
+    )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.submitted" if broker_order else "broker.order.journal_capture",
+        outcome="submitted" if broker_order else "recorded",
+        broker=broker_used,
+        broker_order_id=broker_order_id,
+        idempotency_key=intent_key,
+        setup_id=setup_id,
+        journal_id=journal_entry.get("id") if journal_entry else None,
+        metadata={
+            "symbol": sym,
+            "side": body.side.upper(),
+            "quantity": body.quantity,
+            "execution_status": execution_status,
+            "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
+            "average_fill_price": broker_order.average_price if broker_order else body.price,
         },
     )
     sync_workflow_state(sb, user_id, sym, {
@@ -1137,6 +1717,7 @@ async def place_order(
         "scanner_context": scanner_context,
         "broker_order_id": broker_order_id,
         "journal_id": journal_entry["id"] if journal_entry else None,
+        "setup_id": setup_id,
     })
     next_actions: list[str]
     if broker_used == "simulated":
@@ -1194,6 +1775,7 @@ async def place_order(
         "risk_reward": risk_reward,
         "message":     message,
         "journal_id":  journal_entry["id"] if journal_entry else None,
+        "setup_id":     setup_id,
         "journal_status": "open" if journal_entry else None,
         "next_actions": next_actions,
     }
@@ -1245,6 +1827,7 @@ async def close_position(
         "source": "journal",
         "lifecycle": "closed",
         "journal_id": body.journal_id,
+        "setup_id": entry.get("setup_id"),
     })
 
     lesson_generated = False
@@ -1284,6 +1867,18 @@ async def reconcile_broker_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker order not found")
 
     broker = str(row.get("broker") or "")
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.reconciliation_requested",
+        outcome="accepted",
+        broker=broker or None,
+        broker_order_id=broker_order_id,
+        idempotency_key=str(row.get("idempotency_key") or "") or None,
+        setup_id=str(row.get("setup_id") or "") or None,
+        journal_id=str(row.get("journal_id") or "") or None,
+        metadata={"symbol": str(row.get("symbol") or "").upper(), "current_status": row.get("status")},
+    )
     if broker not in {"zerodha", "upstox"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1307,6 +1902,18 @@ async def reconcile_broker_order(
             BrokerOrderId(broker_order_id),
         )
     except BrokerError as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.reconciliation_failed",
+            outcome="failed",
+            broker=broker,
+            broker_order_id=broker_order_id,
+            idempotency_key=str(row.get("idempotency_key") or "") or None,
+            setup_id=str(row.get("setup_id") or "") or None,
+            journal_id=str(row.get("journal_id") or "") or None,
+            metadata={"symbol": str(row.get("symbol") or "").upper(), "error_kind": exc.kind},
+        )
         status_code = status.HTTP_409_CONFLICT if exc.kind == "AUTH_EXPIRED" else status.HTTP_502_BAD_GATEWAY
         raise HTTPException(
             status_code=status_code,
@@ -1364,6 +1971,7 @@ async def reconcile_broker_order(
             "scanner_context": journal_entry.get("scanner_context"),
             "broker_order_id": broker_order_id,
             "journal_id": journal_id,
+            "setup_id": journal_entry.get("setup_id") or raw_response.get("setup_id"),
         })
     else:
         if broker_order.filled_quantity > 0 and journal_id:
@@ -1403,12 +2011,32 @@ async def reconcile_broker_order(
                 "lifecycle": "ready",
                 "broker_order_id": broker_order_id,
                 "journal_id": None,
+                "setup_id": raw_response.get("setup_id"),
             })
 
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.reconciled",
+        outcome="reconciled",
+        broker=broker,
+        broker_order_id=broker_order_id,
+        idempotency_key=str(row.get("idempotency_key") or "") or None,
+        setup_id=str(raw_response.get("setup_id") or row.get("setup_id") or "") or None,
+        journal_id=str(journal_id or "") or None,
+        metadata={
+            "symbol": broker_order.symbol.upper(),
+            "execution_status": broker_order.status,
+            "filled_quantity": broker_order.filled_quantity,
+            "average_fill_price": broker_order.average_price,
+            "journal_created": bool(journal_status),
+        },
+    )
     return {
         "status": _execution_result_status(broker_order),
         "broker": broker,
         "broker_order_id": broker_order_id,
+        "setup_id": raw_response.get("setup_id"),
         "execution_status": broker_order.status,
         "symbol": broker_order.symbol,
         "quantity": broker_order.quantity,
@@ -1437,7 +2065,7 @@ async def broker_order_activity(
             sb.table("broker_orders")
             .select(
                 "id,broker,broker_order_id,journal_id,symbol,side,quantity,"
-                "order_type,price,status,placed_at,raw_response"
+                "setup_id,order_type,price,status,placed_at,raw_response"
             )
             .eq("user_id", user_id)
             .order("placed_at", desc=True)
@@ -1469,6 +2097,7 @@ async def broker_order_activity(
             "broker": row.get("broker"),
             "broker_order_id": row.get("broker_order_id"),
             "journal_id": journal_id,
+            "setup_id": row.get("setup_id") or raw.get("setup_id"),
             "symbol": str(row.get("symbol") or "").upper(),
             "side": str(row.get("side") or "").upper(),
             "quantity": requested_quantity,
@@ -1489,6 +2118,249 @@ async def broker_order_activity(
         })
 
     return {"orders": activity, "count": len(activity)}
+
+
+@router.get("/broker/audit")
+async def broker_audit_events(
+    limit: int = Query(default=50, ge=1, le=100),
+    event_type: str | None = Query(default=None, max_length=120),
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Return the current user's secret-free broker safety event trail."""
+    sb = get_user_client(user_jwt)
+    try:
+        query = (
+            sb.table("audit_logs")
+            .select(
+                "id,event_type,outcome,actor_type,broker,broker_order_id,"
+                "idempotency_key,setup_id,journal_id,metadata,created_at"
+            )
+            .eq("user_id", user_id)
+        )
+        if isinstance(event_type, str) and event_type.strip():
+            query = query.eq("event_type", event_type.strip()[:120])
+        rows = query.order("created_at", desc=True).limit(limit).execute().data or []
+    except Exception as exc:
+        logger.warning("Broker audit lookup failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker audit history is temporarily unavailable. Existing order state has not been changed.",
+        ) from exc
+
+    events = []
+    for row in rows:
+        metadata = sanitize_audit_metadata(row.get("metadata"))
+        events.append({
+            "id": row.get("id"),
+            "event_type": row.get("event_type"),
+            "outcome": row.get("outcome"),
+            "actor_type": row.get("actor_type"),
+            "broker": row.get("broker"),
+            "broker_order_id": row.get("broker_order_id"),
+            "idempotency_key": row.get("idempotency_key"),
+            "setup_id": row.get("setup_id"),
+            "journal_id": row.get("journal_id"),
+            "metadata": metadata,
+            "created_at": row.get("created_at"),
+        })
+    return {"events": events, "count": len(events)}
+
+
+@router.get("/broker/reconciliations")
+async def list_broker_fill_reconciliations(
+    reconciliation_status: Literal["needs_review", "linked", "dismissed"] = Query(default="needs_review"),
+    limit: int = Query(default=100, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Return the current user's durable broker-fill review queue."""
+    sb = get_user_client(user_jwt)
+    try:
+        rows = (
+            sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("user_id", user_id)
+            .eq("status", reconciliation_status)
+            .order("last_seen_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data or []
+        )
+    except Exception as exc:
+        logger.warning("Broker fill reconciliation lookup failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation history is temporarily unavailable. Existing journal state has not changed.",
+        ) from exc
+
+    return {
+        "reconciliations": [
+            _broker_reconciliation_response(row)
+            for row in rows
+            if isinstance(row, dict)
+        ],
+        "count": len(rows),
+    }
+
+
+@router.post("/broker/reconciliations/{reconciliation_id}/resolve")
+async def resolve_broker_fill_reconciliation(
+    reconciliation_id: UUID,
+    body: BrokerFillReconciliationResolveRequest,
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Explicitly link or dismiss one owner-scoped unmatched broker fill."""
+    # The JWT dependency is intentional: service-role writes below are still
+    # gated by the authenticated owner and never exposed to browser clients.
+    read_sb = get_user_client(user_jwt)
+    sb = get_admin_client()
+    reconciliation_id_value = str(reconciliation_id)
+    try:
+        current = (
+            read_sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("id", reconciliation_id_value)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        logger.warning("Broker fill reconciliation read failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation is temporarily unavailable. No journal state was changed.",
+        ) from exc
+
+    if not isinstance(current, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker reconciliation record not found")
+
+    current_status = str(current.get("status") or "")
+    if current_status in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+        return _broker_reconciliation_response(current)
+
+    journal_id: str | None = None
+    setup_id: str | None = None
+    resolution_note = (body.resolution_note or "").strip()[:500] or None
+
+    if body.action == "link":
+        if body.journal_id is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Choose a journal entry to link")
+        journal_id = str(body.journal_id)
+        journal = (
+            read_sb.table("trade_journal")
+            .select("id,symbol,setup_id")
+            .eq("id", journal_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if not isinstance(journal, dict):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        if str(journal.get("symbol") or "").upper() != str(current.get("symbol") or "").upper():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Journal symbol does not match the broker fill")
+
+        setup_id = str(body.setup_id) if body.setup_id else (str(journal.get("setup_id")) if journal.get("setup_id") else None)
+        if setup_id:
+            setup = (
+                read_sb.table("setups")
+                .select("id,symbol")
+                .eq("id", setup_id)
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            if not isinstance(setup, dict):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setup not found")
+            if str(setup.get("symbol") or "").upper() != str(current.get("symbol") or "").upper():
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Setup symbol does not match the broker fill")
+    elif not resolution_note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Add a short note before dismissing a broker fill",
+        )
+
+    audit_metadata = {
+        "action": body.action,
+        "reconciliation_id": reconciliation_id_value,
+        "symbol": str(current.get("symbol") or "").upper(),
+    }
+    try:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.reconciliation_requested",
+            outcome="accepted",
+            broker=str(current.get("broker") or ""),
+            broker_order_id=str(current.get("broker_order_id") or ""),
+            setup_id=setup_id,
+            journal_id=journal_id,
+            metadata=audit_metadata,
+            required=True,
+        )
+    except AuditLogUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation audit is temporarily unavailable. No journal state was changed.",
+        ) from exc
+
+    updates = {
+        "status": "linked" if body.action == "link" else "dismissed",
+        "journal_id": journal_id,
+        "setup_id": setup_id,
+        "resolution_note": resolution_note,
+        "last_seen_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        sb.table("broker_fill_reconciliations").update(updates).eq(
+            "id", reconciliation_id_value
+        ).eq("user_id", user_id).eq("status", "needs_review").execute()
+        resolved = (
+            sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("id", reconciliation_id_value)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.reconciliation_resolved",
+            outcome="failed",
+            broker=str(current.get("broker") or ""),
+            broker_order_id=str(current.get("broker_order_id") or ""),
+            setup_id=setup_id,
+            journal_id=journal_id,
+            metadata={**audit_metadata, "error_kind": "persistence_failure"},
+        )
+        logger.warning("Broker fill reconciliation update failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation could not be saved. No journal row was changed.",
+        ) from exc
+
+    if not isinstance(resolved, dict):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Broker reconciliation result was unavailable")
+
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.reconciliation_resolved",
+        outcome="reconciled",
+        broker=str(current.get("broker") or ""),
+        broker_order_id=str(current.get("broker_order_id") or ""),
+        setup_id=setup_id,
+        journal_id=journal_id,
+        metadata=audit_metadata,
+    )
+    return _broker_reconciliation_response(resolved)
 
 
 @router.get("/orders")
@@ -1645,10 +2517,26 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     if not api_key:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.oauth_failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": "configuration_missing"},
+        )
         raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app credentials are not configured.")
 
     state_value = create_broker_oauth_state(user_id, "zerodha")
     login_url = kite_api.get_auth_url(state_value, api_key=str(api_key))
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.oauth_started",
+        outcome="accepted",
+        broker="zerodha",
+        metadata={"flow": "oauth"},
+    )
     return {"login_url": login_url}
 
 
@@ -1689,6 +2577,13 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
                 checked_at=checked_at,
                 checks=checks,
             ),
+        )
+        _record_read_only_smoke_audit(
+            user_id=user_id,
+            broker="zerodha",
+            passed=False,
+            checked_at=checked_at,
+            checks=checks,
         )
         return {
             "broker": "zerodha",
@@ -1749,6 +2644,13 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
             checks=checks,
         ),
     )
+    _record_read_only_smoke_audit(
+        user_id=user_id,
+        broker="zerodha",
+        passed=passed,
+        checked_at=checked_at,
+        checks=checks,
+    )
     return {
         "broker": "zerodha",
         "connected_read_only": passed,
@@ -1778,14 +2680,33 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             api_key=str(creds["api_key"]),
         )
     except KiteApiError as e:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"error_kind": e.error_type},
+        )
         raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.message}")
     except Exception:
         logger.exception("Zerodha import failed for user %s", user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"error_kind": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
 
     filled = [o for o in orders if o.get("status") == "COMPLETE"]
     imported = 0
     skipped = 0
+    unmatched_fills = 0
+    unmatched_symbols: list[str] = []
+    persisted_unmatched_fills = 0
 
     for order in filled:
         sym      = (order.get("tradingsymbol") or "").strip().upper()
@@ -1803,13 +2724,43 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             skipped += 1
             continue
 
+        if txn == "SELL" and _broker_fill_reconciliation_status(sb, user_id, "zerodha", order_id) in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+            skipped += 1
+            continue
+
         executed_at = str(order.get("exchange_timestamp") or order.get("order_timestamp") or date.today())
         entry_date = executed_at[:10] if len(executed_at) >= 10 else str(date.today())
         exit_reason = f"Zerodha import — order #{order_id} [{marker}] [Zerodha · auto]"
 
         if txn == "SELL":
-            if _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason):
+            closed_journal_id = _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason)
+            if closed_journal_id:
                 imported += 1
+                _mark_broker_fill_reconciliation_linked(
+                    sb,
+                    user_id=user_id,
+                    broker="zerodha",
+                    broker_order_id=order_id,
+                    journal_id=closed_journal_id,
+                )
+            else:
+                unmatched_fills += 1
+                unmatched_symbols.append(sym)
+                if _upsert_unmatched_broker_fill(
+                    sb,
+                    user_id=user_id,
+                    broker="zerodha",
+                    broker_order_id=order_id,
+                    symbol=sym,
+                    side=txn,
+                    filled_quantity=qty,
+                    average_price=avg_px,
+                    executed_at=_broker_import_executed_at(
+                        order.get("exchange_timestamp") or order.get("order_timestamp"),
+                        naive_timezone=INDIA_TIMEZONE,
+                    ),
+                ):
+                    persisted_unmatched_fills += 1
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -1852,14 +2803,37 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         last_synced_at=synced_at,
         connection_status="connected_read_only",
     )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.completed",
+        outcome="recorded",
+        broker="zerodha",
+        metadata={
+            "imported": imported,
+            "skipped": skipped,
+            "unmatched_fills": unmatched_fills,
+            "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+            "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "persisted_unmatched_fills": persisted_unmatched_fills,
+            "reconciliation_persistence": (
+                "not_needed" if not unmatched_fills else
+                "available" if persisted_unmatched_fills == unmatched_fills else "unavailable"
+            ),
+            "total_filled_orders": len(filled),
+        },
+    )
 
-    return {
-        "imported": imported,
-        "skipped":  skipped,
-        "total_filled_orders": len(filled),
-        "last_synced_at": synced_at,
-        "message": f"Imported {imported} new trade(s) from Zerodha.",
-    }
+    return _broker_import_result(
+        broker="Zerodha",
+        imported=imported,
+        skipped=skipped,
+        unmatched_fills=unmatched_fills,
+        unmatched_symbols=unmatched_symbols,
+        persisted_unmatched_fills=persisted_unmatched_fills,
+        total_filled_orders=len(filled),
+        last_synced_at=synced_at,
+    )
 
 
 @router.post("/broker/{broker_name}/import")
@@ -1889,18 +2863,43 @@ async def import_broker_trades(
         )
         orders = await adapter.list_orders(creds)
     except BrokerError as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"error_kind": exc.kind},
+        )
         raise HTTPException(status_code=400, detail=f"{broker_name.capitalize()} import failed: {exc}") from exc
     except Exception:
         logger.exception("%s import failed for user %s", broker_name, user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"error_kind": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail=f"Could not connect to {broker_name.capitalize()}.")
 
     filled = [o for o in orders if o.status == "COMPLETE" and o.filled_quantity > 0]
     imported = 0
     skipped = 0
+    unmatched_fills = 0
+    unmatched_symbols: list[str] = []
+    persisted_unmatched_fills = 0
     for order in filled:
         marker = _broker_import_marker(broker_name, str(order.broker_order_id))
         existing = _import_already_recorded(sb, user_id, marker)
         if existing:
+            skipped += 1
+            continue
+
+        if order.side == "SELL" and _broker_fill_reconciliation_status(
+            sb, user_id, broker_name, str(order.broker_order_id)
+        ) in BROKER_RECONCILIATION_RESOLVED_STATUSES:
             skipped += 1
             continue
 
@@ -1910,8 +2909,31 @@ async def import_broker_trades(
 
         exit_reason = f"{broker_name.capitalize()} import — order #{order.broker_order_id} [{marker}] [{broker_name.capitalize()} · auto]"
         if order.side == "SELL":
-            if _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason):
+            closed_journal_id = _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason)
+            if closed_journal_id:
                 imported += 1
+                _mark_broker_fill_reconciliation_linked(
+                    sb,
+                    user_id=user_id,
+                    broker=broker_name,
+                    broker_order_id=str(order.broker_order_id),
+                    journal_id=closed_journal_id,
+                )
+            else:
+                unmatched_fills += 1
+                unmatched_symbols.append(order.symbol)
+                if _upsert_unmatched_broker_fill(
+                    sb,
+                    user_id=user_id,
+                    broker=broker_name,
+                    broker_order_id=str(order.broker_order_id),
+                    symbol=order.symbol,
+                    side=order.side,
+                    filled_quantity=order.filled_quantity,
+                    average_price=entry_price,
+                    executed_at=_broker_import_executed_at(order.updated_at),
+                ):
+                    persisted_unmatched_fills += 1
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -1953,13 +2975,36 @@ async def import_broker_trades(
         last_synced_at=synced_at,
         connection_status="connected_read_only",
     )
-    return {
-        "imported": imported,
-        "skipped": skipped,
-        "total_filled_orders": len(filled),
-        "last_synced_at": synced_at,
-        "message": f"Imported {imported} new trade(s) from {broker_name.capitalize()}.",
-    }
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.completed",
+        outcome="recorded",
+        broker=broker_name,
+        metadata={
+            "imported": imported,
+            "skipped": skipped,
+            "unmatched_fills": unmatched_fills,
+            "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+            "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "persisted_unmatched_fills": persisted_unmatched_fills,
+            "reconciliation_persistence": (
+                "not_needed" if not unmatched_fills else
+                "available" if persisted_unmatched_fills == unmatched_fills else "unavailable"
+            ),
+            "total_filled_orders": len(filled),
+        },
+    )
+    return _broker_import_result(
+        broker=broker_name.capitalize(),
+        imported=imported,
+        skipped=skipped,
+        unmatched_fills=unmatched_fills,
+        unmatched_symbols=unmatched_symbols,
+        persisted_unmatched_fills=persisted_unmatched_fills,
+        total_filled_orders=len(filled),
+        last_synced_at=synced_at,
+    )
 
 
 @router.get("/broker/zerodha/callback")
@@ -1994,9 +3039,25 @@ async def zerodha_callback(
     except KiteApiError as e:
         # Never include `e` in the response — it may contain api_secret or request_token.
         logger.error("Zerodha session generation failed for user %s: %s", user_id, e.message)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": e.error_type},
+        )
         raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
     except Exception:
         logger.exception("Zerodha session generation failed for user %s", user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
 
     import datetime
@@ -2024,6 +3085,15 @@ async def zerodha_callback(
         connection_status="connected_read_only",
     )
 
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.connected",
+        outcome="recorded",
+        broker="zerodha",
+        metadata={"profile_available": bool(broker_user_id or broker_user_name)},
+    )
+
     return {"status": "connected", "message": "Zerodha connected successfully"}
 
 
@@ -2046,6 +3116,14 @@ async def broker_oauth_callback(
         profile = await adapter.get_profile(creds)
     except BrokerError as exc:
         logger.warning("Broker %s OAuth callback failed for user %s: %s", broker_name, user_id, exc)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"reason": exc.kind},
+        )
         raise HTTPException(status_code=400, detail="Broker connection failed. Reconnect from Settings.")
 
     upsert_broker_credential(user_id, broker_name, "access_token", creds.access_token)
@@ -2068,6 +3146,14 @@ async def broker_oauth_callback(
         broker_user_name=profile.display_name,
         token_expires_at=creds.expires_at.isoformat(),
         connection_status="connected_read_only",
+    )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.connected",
+        outcome="recorded",
+        broker=broker_name,
+        metadata={"profile_available": True},
     )
     return {
         "status": "connected",

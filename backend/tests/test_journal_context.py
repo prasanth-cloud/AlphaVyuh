@@ -117,6 +117,25 @@ def test_create_journal_entry_persists_structured_idea_context(monkeypatch):
     assert client.workflow_upserts[-1]["scanner_context"]["data_as_of"] == "2026-05-15"
 
 
+def test_create_journal_entry_marks_missing_setup_as_unplanned(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+
+    body = journal.JournalEntry(
+        symbol="reliance",
+        trade_type="long",
+        entry_date="2026-05-15",
+        entry_price=2500,
+        quantity=3,
+    )
+
+    asyncio.run(journal.create_entry(body, user_id="user-1"))
+
+    assert client.journal_insert["setup_id"] is None
+    assert client.journal_insert["setup_type"] == "unplanned"
+    assert client.workflow_upserts[-1]["setup_type"] == "unplanned"
+
+
 def test_journal_context_migration_adds_trade_and_workflow_context_columns():
     sql = (REPO_ROOT / "supabase/migrations/039_journal_idea_context.sql").read_text()
 
@@ -152,4 +171,5 @@ def test_update_journal_entry_accepts_structured_context_without_clobbering_clos
         "scanner_context": {"preset_name": "Box Breakout"},
         "thesis": "Updated thesis.",
         "invalidation_rule": "Updated invalidation.",
+        "setup_type": "unplanned",
     }

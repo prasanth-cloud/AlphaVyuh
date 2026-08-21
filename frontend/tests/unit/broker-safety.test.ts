@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderActionBarPresentation, brokerOrderGatePresentation, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderActionBarPresentation, brokerOrderGatePresentation, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary, canRouteLiveBrokerOrder } from "@/lib/broker-safety";
 
 describe("broker order gate presentation", () => {
+  it("requires a connected broker, active durable setup, and permitted review before live routing", () => {
+    const broker = {
+      broker: "zerodha",
+      connected: true,
+      plan_allows_broker: true,
+      live_order_enabled: true,
+    };
+
+    expect(canRouteLiveBrokerOrder({ broker, setupId: "setup-1", lifecycle: "ready", reviewCanProceed: true })).toBe(true);
+    expect(canRouteLiveBrokerOrder({ broker, setupId: null, lifecycle: "ready", reviewCanProceed: true })).toBe(false);
+    expect(canRouteLiveBrokerOrder({ broker, setupId: "setup-1", lifecycle: "planned", reviewCanProceed: true })).toBe(false);
+    expect(canRouteLiveBrokerOrder({ broker, setupId: "setup-1", lifecycle: "ready", reviewCanProceed: false })).toBe(false);
+    expect(canRouteLiveBrokerOrder({ broker: { ...broker, plan_allows_broker: false }, setupId: "setup-1", lifecycle: "ready", reviewCanProceed: true })).toBe(false);
+    expect(canRouteLiveBrokerOrder({ broker: { ...broker, broker: "dhan" }, setupId: "setup-1", lifecycle: "ready", reviewCanProceed: true })).toBe(false);
+  });
+
   it("fails closed when broker status is unavailable", () => {
     expect(brokerOrderGatePresentation(null, { unavailable: true })).toEqual({
       value: "UNAVAILABLE",

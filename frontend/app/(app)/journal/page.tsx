@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
+  captureJournalIntradayPath,
+  getJournalReviews, saveTradeReview,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
-  searchSymbols, analyseJournal, getAiPatterns,
+  searchSymbols, analyseJournal, getAiPatterns, getSetups,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
+  getBrokerFillReconciliations, resolveBrokerFillReconciliation,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, JournalIntradayPathInterval, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview, BrokerFillReconciliation } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -34,6 +37,8 @@ const JOURNAL_IMPORT_FAILED_MESSAGE = `Broker import could not run. Check Broker
 const JOURNAL_ANALYSIS_FAILED_MESSAGE = `Journal analysis could not run. ${JOURNAL_RECOVERY_MESSAGE}`;
 const JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
 const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailable. Check Broker or Data Status, then refresh Journal.`;
+const JOURNAL_SETUP_RESOLUTION_FAILED_MESSAGE = "Setup matches could not be loaded. Check Data Status, then try again.";
+const JOURNAL_SETUP_LINK_FAILED_MESSAGE = `Setup link could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -55,17 +60,33 @@ export default function JournalPage() {
   const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [brokerCanImport, setBrokerCanImport] = useState(false);
   const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
+  const [brokerImportWarning, setBrokerImportWarning] = useState<{
+    count: number;
+    symbols: string[];
+    persistence: "available" | "unavailable" | "not_needed";
+  } | null>(null);
+  const [brokerReconciliations, setBrokerReconciliations] = useState<BrokerFillReconciliation[]>([]);
+  const [brokerReconciliationError, setBrokerReconciliationError] = useState<string | null>(null);
+  const [resolvingReconciliationId, setResolvingReconciliationId] = useState<string | null>(null);
+  const [reconciliationJournalIds, setReconciliationJournalIds] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState<JournalAnalyticsRange>({ fromDate: "", toDate: "" });
   const [loading, setLoading] = useState(true);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [journalStatsError, setJournalStatsError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
+  const [setupOptions, setSetupOptions] = useState<Setup[]>([]);
+  const [setupOptionsLoading, setSetupOptionsLoading] = useState(false);
+  const [setupOptionsError, setSetupOptionsError] = useState<string | null>(null);
+  const [linkingSetupId, setLinkingSetupId] = useState<string | null>(null);
+  const setupResolutionRequest = useRef(0);
   const [saving, setSaving] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [toast, setToast] = useState("");
@@ -90,6 +111,24 @@ export default function JournalPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
+  const loadAnalytics = useCallback(async (range: JournalAnalyticsRange = { fromDate: "", toDate: "" }) => {
+    setAnalyticsLoading(true);
+    try {
+      const nextAnalytics = await getJournalAnalytics({
+        fromDate: range.fromDate || undefined,
+        toDate: range.toDate || undefined,
+      });
+      setAnalytics(nextAnalytics);
+      setAnalyticsRange(range);
+      setAnalyticsError(null);
+    } catch (error) {
+      setAnalytics(null);
+      setAnalyticsError(accountDataErrorMessage(error, "Journal analytics are temporarily unavailable. Trade rows may still be current."));
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [entriesResult, statsResult] = await Promise.allSettled([
@@ -101,15 +140,24 @@ export default function JournalPage() {
       setEntries(entriesResult.value.entries);
       setJournalPlan(entriesResult.value.plan ?? null);
       setJournalLoadError(null);
-      getJournalAnalytics()
-        .then((analytics) => {
-          setAnalytics(analytics);
-          setAnalyticsError(null);
+      getJournalReviews()
+        .then((reviews) => {
+          const reviewsByEntry = new Map(reviews.map((review) => [review.journal_entry_id, review]));
+          setEntries((current) => current.map((entry) => {
+            const review = reviewsByEntry.get(entry.id);
+            if (!review) return entry;
+            return {
+              ...entry,
+              review,
+              mistakes: review.mistakes ?? entry.mistakes,
+              lessons: review.lesson ?? entry.lessons,
+            };
+          }));
         })
-        .catch((error) => {
-          setAnalytics(null);
-          setAnalyticsError(accountDataErrorMessage(error, "Journal analytics are temporarily unavailable. Trade rows may still be current."));
+        .catch(() => {
+          // The legacy journal fields remain usable while the review resource is unavailable.
         });
+      void loadAnalytics();
     } else {
       setJournalLoadError(accountDataErrorMessage(entriesResult.reason, "Journal entries are temporarily unavailable. Your trades were not loaded."));
       setAnalytics(null);
@@ -125,7 +173,7 @@ export default function JournalPage() {
     }
 
     setLoading(false);
-  }, []);
+  }, [loadAnalytics]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -166,6 +214,22 @@ export default function JournalPage() {
   }, []);
 
   useEffect(() => { refreshBrokerStatus(); }, [refreshBrokerStatus]);
+
+  const loadBrokerReconciliations = useCallback(async () => {
+    try {
+      const result = await getBrokerFillReconciliations();
+      setBrokerReconciliations(result.reconciliations);
+      setBrokerReconciliationError(null);
+    } catch (error) {
+      setBrokerReconciliations([]);
+      setBrokerReconciliationError(accountDataErrorMessage(
+        error,
+        "Broker reconciliation history is temporarily unavailable. Existing journal entries are unchanged.",
+      ));
+    }
+  }, []);
+
+  useEffect(() => { void loadBrokerReconciliations(); }, [loadBrokerReconciliations]);
 
   useEffect(() => {
     if (tab !== "ai" || patterns !== null) return;
@@ -275,7 +339,7 @@ export default function JournalPage() {
       await createJournalEntry({
         ...addForm,
         symbol: selectedSymbol,
-        setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? undefined,
+        setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? "unplanned",
       } as CreateJournalEntry);
       trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
@@ -314,7 +378,11 @@ export default function JournalPage() {
     finally { setLessonLoading(null); }
   };
 
-  const handleSaveReviewLesson = async (entry: JournalEntry, lesson: string) => {
+  const handleSaveReviewLesson = async (
+    entry: JournalEntry,
+    lesson: string,
+    reviewInput: { plan_adherence: TradeReview["plan_adherence"]; follow_up: string | null },
+  ) => {
     const cleaned = lesson.trim();
     if (!cleaned) {
       showToast("Add one lesson before saving the review");
@@ -322,7 +390,19 @@ export default function JournalPage() {
     }
     setReviewSaving(true);
     try {
-      const updated = await updateJournalEntry(entry.id, { lessons: cleaned });
+      const review = await saveTradeReview(entry.id, {
+        lesson: cleaned,
+        mistakes: entry.mistakes,
+        plan_adherence: reviewInput.plan_adherence,
+        follow_up: reviewInput.follow_up,
+        source: "manual",
+      });
+      const updated = {
+        ...entry,
+        review,
+        mistakes: review.mistakes ?? entry.mistakes,
+        lessons: review.lesson ?? entry.lessons,
+      };
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       setSelectedEntry(updated);
       completeReview(updated.symbol);
@@ -336,13 +416,52 @@ export default function JournalPage() {
     setImporting(true);
     try {
       const r = await importZerodhaTrades();
-      trackEvent("journal_entry_created", { source: "broker_import", imported: r.imported, skipped: r.skipped });
+      trackEvent("journal_entry_created", {
+        source: "broker_import",
+        imported: r.imported,
+        skipped: r.skipped,
+        unmatched_fills: r.unmatched_fills,
+      });
       showToast(r.message || JOURNAL_IMPORT_RESULT_FAILED_MESSAGE);
       setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
+      setBrokerImportWarning(r.unmatched_fills > 0 ? {
+        count: r.unmatched_fills,
+        symbols: r.unmatched_symbols,
+        persistence: r.reconciliation_persistence,
+      } : null);
       refreshBrokerStatus();
-      if (r.imported > 0) load();
+      void loadBrokerReconciliations();
+      if (r.imported > 0 || r.unmatched_fills > 0) load();
     } catch { showToast(JOURNAL_IMPORT_FAILED_MESSAGE); }
     finally { setImporting(false); }
+  };
+
+  const handleLinkBrokerReconciliation = async (reconciliation: BrokerFillReconciliation) => {
+    const journalId = reconciliationJournalIds[reconciliation.id];
+    if (!journalId) {
+      showToast("Choose a matching journal entry first");
+      return;
+    }
+    setResolvingReconciliationId(reconciliation.id);
+    try {
+      await resolveBrokerFillReconciliation(reconciliation.id, {
+        action: "link",
+        journal_id: journalId,
+      });
+      setBrokerReconciliations((current) => current.filter((item) => item.id !== reconciliation.id));
+      setReconciliationJournalIds((current) => {
+        const next = { ...current };
+        delete next[reconciliation.id];
+        return next;
+      });
+      showToast(`${reconciliation.symbol} broker fill linked to Journal`);
+      void load();
+      void loadBrokerReconciliations();
+    } catch (error) {
+      showToast(accountDataErrorMessage(error, "Broker reconciliation could not be saved. Check Data Status, then try again."));
+    } finally {
+      setResolvingReconciliationId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -356,7 +475,59 @@ export default function JournalPage() {
     }
   };
 
+  const loadSetupOptions = useCallback(async (entry: JournalEntry) => {
+    const requestId = setupResolutionRequest.current + 1;
+    setupResolutionRequest.current = requestId;
+    setSetupOptions([]);
+    setSetupOptionsError(null);
+    if (entry.setup_id) {
+      setSetupOptionsLoading(false);
+      return;
+    }
+
+    setSetupOptionsLoading(true);
+    try {
+      const setups = await getSetups({ symbol: entry.symbol });
+      if (setupResolutionRequest.current !== requestId) return;
+      setSetupOptions(setups.filter((setup) => (
+        setup.status === "planned" || setup.status === "ready" || setup.status === "triggered" || setup.status === "open"
+      )));
+    } catch (error) {
+      if (setupResolutionRequest.current !== requestId) return;
+      setSetupOptionsError(accountDataErrorMessage(error, JOURNAL_SETUP_RESOLUTION_FAILED_MESSAGE));
+    } finally {
+      if (setupResolutionRequest.current === requestId) setSetupOptionsLoading(false);
+    }
+  }, []);
+
+  const handleLinkSetup = async (setup: Setup) => {
+    if (!selectedEntry || selectedEntry.setup_id) return;
+    setLinkingSetupId(setup.id);
+    try {
+      const updated = await updateJournalEntry(selectedEntry.id, {
+        setup_id: setup.id,
+        setup_type: normalizeSetupTagForSave(setup.strategy_tag) ?? "other",
+      });
+      if (updated.id !== selectedEntry.id || updated.setup_id !== setup.id) {
+        throw new Error("Setup link returned an invalid journal response.");
+      }
+      setEntries((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+      setSelectedEntry(updated);
+      setSetupOptions([]);
+      setSetupOptionsError(null);
+      showToast("Trade linked to durable setup");
+    } catch {
+      showToast(JOURNAL_SETUP_LINK_FAILED_MESSAGE);
+    } finally {
+      setLinkingSetupId(null);
+    }
+  };
+
   const openClosePanel = (e: JournalEntry) => {
+    setupResolutionRequest.current += 1;
+    setSetupOptions([]);
+    setSetupOptionsError(null);
+    setSetupOptionsLoading(false);
     setSelectedEntry(e);
     setCloseForm({ exit_date: new Date().toISOString().split("T")[0] });
     setCloseSetupType(e.setup_type || "");
@@ -386,6 +557,16 @@ export default function JournalPage() {
     setSymbolFocus("");
   };
 
+  const handleCaptureIntradayPath = useCallback(async (entryId: string, interval: JournalIntradayPathInterval) => {
+    try {
+      const result = await captureJournalIntradayPath(entryId, { broker: "zerodha", interval });
+      showToast(`${result.bar_count} Zerodha ${interval.replace("minute", "m")} bars captured`);
+      await loadAnalytics(analyticsRange);
+    } catch (error) {
+      showToast(accountDataErrorMessage(error, "Intraday path capture failed. Check Broker or Data Status, then try again."));
+    }
+  }, [analyticsRange, loadAnalytics]);
+
   return (
     <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
@@ -412,6 +593,107 @@ export default function JournalPage() {
         onImport={handleImportZerodha}
         onAddTrade={openAddPanel}
       />
+
+      {brokerImportWarning && (
+        <div
+          className="workspace-card"
+          data-testid="journal-import-reconciliation-warning"
+          role="alert"
+          style={{ padding: 14, display: "grid", gap: 4, borderColor: "var(--border-subtle)", background: "var(--warn-subtle)" }}
+        >
+          <EyebrowLabel>Broker import needs reconciliation</EyebrowLabel>
+          <div className="text-[13px] leading-relaxed" style={{ color: "var(--warn)" }}>
+            {brokerImportWarning.count} filled broker order{brokerImportWarning.count === 1 ? "" : "s"} could not be matched to an open journal entry.
+          </div>
+          <div className="text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+            AlphaVyuh did not create a false journal close. Review the broker statement and link or record the trade before relying on imported coverage.
+            {brokerImportWarning.symbols.length > 0 ? ` Symbols: ${brokerImportWarning.symbols.join(", ")}.` : ""}
+          </div>
+          {brokerImportWarning.persistence === "unavailable" && (
+            <div className="text-[12px] leading-relaxed" style={{ color: "var(--warn)" }}>
+              This import could not save a durable review record. Keep this page open and retry after Data Status is healthy.
+            </div>
+          )}
+        </div>
+      )}
+
+      {brokerReconciliationError && brokerReconciliations.length === 0 && (
+        <div
+          className="workspace-card"
+          data-testid="journal-broker-reconciliation-unavailable"
+          role="status"
+          style={{ padding: 14, display: "grid", gap: 4, borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+        >
+          <EyebrowLabel>Broker reconciliation history</EyebrowLabel>
+          <div className="text-[12px] leading-relaxed" style={{ color: "var(--warn)" }}>{brokerReconciliationError}</div>
+        </div>
+      )}
+
+      {brokerReconciliations.length > 0 && (
+        <div
+          className="workspace-card"
+          data-testid="journal-broker-reconciliation-list"
+          style={{ padding: 14, display: "grid", gap: 12, borderColor: "var(--border-subtle)" }}
+        >
+          <div>
+            <EyebrowLabel>Broker fills needing review</EyebrowLabel>
+            <div className="mt-1 text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              These fills were imported from the broker but did not match an open Journal position. Link each one to an existing trade after checking the broker statement.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {brokerReconciliations.map((reconciliation) => {
+              const matches = entries.filter((entry) => entry.symbol === reconciliation.symbol);
+              const selectedJournalId = reconciliationJournalIds[reconciliation.id] ?? "";
+              const resolving = resolvingReconciliationId === reconciliation.id;
+              return (
+                <div
+                  key={reconciliation.id}
+                  data-testid={`journal-broker-reconciliation-${reconciliation.id}`}
+                  style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(220px, 1.4fr) auto", gap: 10, alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border-subtle)" }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div className="text-[13px]" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                      {reconciliation.symbol} · {reconciliation.side === "SELL" ? "Sell" : "Buy"}
+                    </div>
+                    <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                      {reconciliation.broker} order {reconciliation.broker_order_id} · {reconciliation.filled_quantity} @ {fmtCcy(reconciliation.average_price)}
+                      {reconciliation.executed_at ? ` · ${reconciliation.executed_at.slice(0, 10)}` : ""}
+                    </div>
+                  </div>
+                  <select
+                    aria-label={`Journal entry for ${reconciliation.symbol}`}
+                    value={selectedJournalId}
+                    onChange={(event) => setReconciliationJournalIds((current) => ({ ...current, [reconciliation.id]: event.target.value }))}
+                    disabled={resolving}
+                    style={{ minWidth: 0, width: "100%", padding: "8px 10px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-default)", background: "var(--surface-2)", color: "var(--text-primary)", fontSize: 12 }}
+                  >
+                    <option value="">Choose matching Journal entry</option>
+                    {matches.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.symbol} · {entry.entry_date.slice(0, 10)} · {entry.quantity} @ {fmtCcy(entry.entry_price)} · {entry.status}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="workspace-chip-button"
+                    disabled={!selectedJournalId || resolving}
+                    onClick={() => { void handleLinkBrokerReconciliation(reconciliation); }}
+                  >
+                    {resolving ? "Linking…" : "Link trade"}
+                  </button>
+                  {matches.length === 0 && (
+                    <div className="text-[12px] leading-relaxed" style={{ gridColumn: "1 / -1", color: "var(--text-tertiary)" }}>
+                      No Journal entry for {reconciliation.symbol} is loaded. Record the trade in Journal, then return here to link it.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {(journalLoadError || journalStatsError || brokerStatusError) && (
         <div
@@ -629,8 +911,12 @@ export default function JournalPage() {
         <JournalAnalyticsTab
           analytics={analytics}
           analyticsError={analyticsError}
+          analyticsLoading={analyticsLoading}
+          analyticsRange={analyticsRange}
+          onAnalyticsRangeChange={loadAnalytics}
           entries={entries}
           onCalendarDateSelect={handleCalendarDateSelect}
+          onCaptureIntradayPath={handleCaptureIntradayPath}
         />
       )}
 
@@ -668,7 +954,7 @@ export default function JournalPage() {
               setReviewFocus("all");
             }}
             selectedEntry={selectedEntry}
-            onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); }}
+            onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); void loadSetupOptions(e); }}
             onCloseEntry={openClosePanel}
             onDeleteEntry={handleDelete}
             onAddTrade={openAddPanel}
@@ -679,6 +965,11 @@ export default function JournalPage() {
           <TradePanel
             mode={panelMode}
             selectedEntry={selectedEntry}
+            setupOptions={setupOptions}
+            setupOptionsLoading={setupOptionsLoading}
+            setupOptionsError={setupOptionsError}
+            linkingSetupId={linkingSetupId}
+            onLinkSetup={handleLinkSetup}
             saving={saving}
             lessonLoading={lessonLoading}
             addForm={addForm}

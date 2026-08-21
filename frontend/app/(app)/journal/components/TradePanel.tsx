@@ -6,7 +6,8 @@ import { Card } from "@/components/ui";
 import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
-import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
+import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, ReviewSaveInput } from "./types";
+import type { Setup } from "@/lib/api";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
 
@@ -37,6 +38,11 @@ function SetupChips({ value, onChange }: { value: string; onChange: (v: string) 
 interface TradePanelProps {
   mode: PanelMode;
   selectedEntry: JournalEntry | null;
+  setupOptions: Setup[];
+  setupOptionsLoading: boolean;
+  setupOptionsError: string | null;
+  linkingSetupId: string | null;
+  onLinkSetup: (setup: Setup) => void;
   saving: boolean;
   lessonLoading: string | null;
   // Add form
@@ -65,7 +71,7 @@ interface TradePanelProps {
   // View + shared
   onClose: () => void;
   onGetLesson: (e: JournalEntry) => void;
-  onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
+  onSaveReviewLesson: (e: JournalEntry, lesson: string, input: ReviewSaveInput) => void;
   onInitiateClose: (e: JournalEntry) => void;
   reviewSaving: boolean;
   chartPrefilled?: boolean;
@@ -76,6 +82,11 @@ interface TradePanelProps {
 export function TradePanel({
   mode,
   selectedEntry,
+  setupOptions,
+  setupOptionsLoading,
+  setupOptionsError,
+  linkingSetupId,
+  onLinkSetup,
   saving,
   lessonLoading,
   addForm,
@@ -107,10 +118,14 @@ export function TradePanel({
   chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
+  const [reviewAdherence, setReviewAdherence] = useState<ReviewSaveInput["plan_adherence"]>("unknown");
+  const [followUpDraft, setFollowUpDraft] = useState("");
 
   useEffect(() => {
     setLessonDraft("");
-  }, [selectedEntry?.id]);
+    setReviewAdherence(selectedEntry?.review?.plan_adherence ?? "unknown");
+    setFollowUpDraft(selectedEntry?.review?.follow_up ?? "");
+  }, [selectedEntry?.id, selectedEntry?.review?.follow_up, selectedEntry?.review?.plan_adherence]);
 
   if (!mode) return null;
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
@@ -392,6 +407,67 @@ export function TradePanel({
               ))}
             </div>
 
+            {selectedEntry.setup_id ? (
+              <div
+                data-testid="journal-setup-linked"
+                style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--gain-subtle)", border: "1px solid var(--border-subtle)" }}
+              >
+                <div className="label" style={{ marginBottom: 4, color: "var(--gain)" }}>Durable setup linked</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>
+                  This journal entry keeps the same setup lineage used for planning and review.
+                </div>
+              </div>
+            ) : (
+              <div
+                data-testid="journal-setup-resolution"
+                style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)" }}
+              >
+                <div className="label" style={{ marginBottom: 5, color: "var(--accent)" }}>Resolve durable setup</div>
+                <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)", marginBottom: 10 }}>
+                  This trade has no durable setup link. Choose an active owner setup for {selectedEntry.symbol}; otherwise it remains explicitly unplanned.
+                </div>
+                {setupOptionsLoading && (
+                  <div className="caption">Loading active setups…</div>
+                )}
+                {!setupOptionsLoading && setupOptionsError && (
+                  <div data-testid="journal-setup-resolution-error" style={{ fontSize: 12, lineHeight: 1.5, color: "var(--loss)" }}>
+                    {setupOptionsError}
+                  </div>
+                )}
+                {!setupOptionsLoading && !setupOptionsError && setupOptions.length === 0 && (
+                  <div data-testid="journal-setup-resolution-empty" className="caption">
+                    No active setup matches this symbol.
+                  </div>
+                )}
+                {!setupOptionsLoading && !setupOptionsError && setupOptions.length > 0 && (
+                  <div style={{ display: "grid", gap: 7 }}>
+                    {setupOptions.map((setup) => {
+                      const setupLabel = formatSetupTagDisplay(setup.strategy_tag) === "—"
+                        ? "Untitled setup"
+                        : formatSetupTagDisplay(setup.strategy_tag);
+                      return (
+                        <div key={setup.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: "var(--radius-sm)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{setupLabel}</div>
+                            <div className="caption">{formatSetupTagDisplay(setup.status)} · {formatSetupTagDisplay(setup.source)} · {setup.direction === "long" ? "Long" : "Short"}</div>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={`Link ${setupLabel} setup`}
+                            onClick={() => onLinkSetup(setup)}
+                            disabled={linkingSetupId !== null}
+                            style={{ flexShrink: 0, padding: "5px 9px", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", fontSize: 11, fontWeight: 600, cursor: linkingSetupId !== null ? "not-allowed" : "pointer", opacity: linkingSetupId !== null && linkingSetupId !== setup.id ? 0.5 : 1 }}
+                          >
+                            {linkingSetupId === setup.id ? "Linking…" : "Link setup"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {selectedEntry.entry_reason && (
               <div>
                 <div className="label" style={{ marginBottom: 4 }}>Entry reason</div>
@@ -491,8 +567,36 @@ export function TradePanel({
                     style={{ ...inputStyle, resize: "none" }}
                   />
                 </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 6 }}>Plan adherence</div>
+                  <select
+                    aria-label="Plan adherence"
+                    value={reviewAdherence}
+                    onChange={ev => setReviewAdherence(ev.target.value as ReviewSaveInput["plan_adherence"])}
+                    style={inputStyle}
+                  >
+                    <option value="unknown">Not recorded</option>
+                    <option value="followed">Followed the plan</option>
+                    <option value="partial">Partly followed</option>
+                    <option value="not_followed">Did not follow the plan</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 6 }}>Next process change</div>
+                  <textarea
+                    aria-label="Next process change"
+                    value={followUpDraft}
+                    onChange={ev => setFollowUpDraft(ev.target.value)}
+                    rows={2}
+                    placeholder="One change to carry into the next setup..."
+                    style={{ ...inputStyle, resize: "none" }}
+                  />
+                </div>
                 <button
-                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft)}
+                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft, {
+                    plan_adherence: reviewAdherence,
+                    follow_up: followUpDraft.trim() || null,
+                  })}
                   disabled={reviewSaving || !reviewDraft}
                   style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, border: "1px solid var(--accent)", color: "var(--text-on-accent)", background: "var(--accent)", cursor: reviewSaving || !reviewDraft ? "not-allowed" : "pointer", opacity: reviewSaving || !reviewDraft ? 0.5 : 1 }}
                 >

@@ -61,6 +61,144 @@ describe("account data API failures", () => {
     await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics are temporarily unavailable.");
   });
 
+  it("accepts the legacy unavailable MAE/MFE shape during a rolling deployment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        mae_mfe: { status: "unavailable", reason: "Daily OHLCV paths were not available." },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+    const analytics = await getJournalAnalytics();
+
+    expect(analytics.mae_mfe).toMatchObject({
+      status: "unavailable",
+      basis: "legacy_unavailable",
+      trades_with_path: 0,
+      trades_without_path: 0,
+      trades: [],
+    });
+  });
+
+  it("rejects malformed review-aware analytics instead of trusting the response shape", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        review_summary: {
+          minimum_sample_size: 5,
+          reviewed_trades: "4",
+          unreviewed_closed_trades: 1,
+          linked_trades: 1,
+          unplanned_trades: 0,
+          sample_size_sufficient: false,
+          plan_adherence: [],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid review summary.");
+  });
+
+  it("rejects malformed persisted excursion coverage instead of trusting optional fields", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        mae_mfe: {
+          status: "available",
+          basis: "intraday_path",
+          trades_with_path: 1,
+          trades_without_path: 0,
+          intraday_trades: "1",
+          eod_proxy_trades: 0,
+          avg_mae_pct: -1,
+          avg_mfe_pct: 2,
+          avg_mae_r: -0.5,
+          avg_mfe_r: 1,
+          trades: [{
+            journal_entry_id: "entry-1",
+            symbol: "RELIANCE",
+            mae_pct: -1,
+            mfe_pct: 2,
+            mae_r: -0.5,
+            mfe_r: 1,
+            bars_count: 4,
+            basis: "intraday_path",
+            interval: "15minute",
+            source: "zerodha_kite",
+          }],
+          reason: "Persisted path",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid MAE/MFE status.");
+  });
+
+  it("rejects malformed intraday capture responses", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ id: "path-1", journal_id: "entry-1", symbol: "RELIANCE" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { captureJournalIntradayPath } = await import("@/lib/api");
+
+    await expect(captureJournalIntradayPath("entry-1")).rejects.toThrow("Intraday path capture returned an invalid response.");
+  });
+
+  it("rejects malformed outcome cohort analytics instead of treating them as empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        cohort_breakdown: {
+          scanner: [{ cohort: "Trend Template", trades: 1, wins: 1, win_rate: 100, total_pnl: 100, avg_pnl: 100, avg_r_multiple: "2", reviewed_trades: 1 }],
+          sector: [],
+          holding_period: [],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid cohort breakdown.");
+  });
+
   it("surfaces AI pattern failures instead of returning insufficient-trade readiness", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Trade pattern review is temporarily unavailable." }),
@@ -96,5 +234,48 @@ describe("account data API failures", () => {
     const { getBrokerStatus } = await import("@/lib/api");
 
     await expect(getBrokerStatus()).rejects.toThrow("Broker status temporarily unavailable.");
+  });
+
+  it("rejects malformed broker position payloads instead of treating them as empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify([{ symbol: "SBIN", exchange: "NSE", quantity: 2 }]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getBrokerPositions } = await import("@/lib/api");
+
+    await expect(getBrokerPositions("upstox")).rejects.toThrow("Broker positions are temporarily unavailable.");
+  });
+
+  it("rejects malformed broker orderbook payloads instead of treating them as empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        broker: "upstox",
+        orders: [{
+          broker_order_id: "order-1",
+          symbol: "SBIN",
+          exchange: "NSE",
+          side: "BUY",
+          order_type: "LIMIT",
+          product: "CNC",
+          status: "COMPLETE",
+          quantity: 2,
+          filled_quantity: 2,
+          average_price: 570.95,
+          limit_price: 571,
+          trigger_price: null,
+          placed_at: "2026-05-05T09:20:00Z",
+          // updated_at intentionally omitted
+          rejection_reason: null,
+        }],
+        count: 1,
+        fetched_at: "2026-05-05T09:21:00Z",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getBrokerOrders } = await import("@/lib/api");
+
+    await expect(getBrokerOrders("upstox")).rejects.toThrow("Broker orderbook is temporarily unavailable.");
   });
 });

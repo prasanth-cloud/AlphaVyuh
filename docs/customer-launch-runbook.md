@@ -121,7 +121,13 @@ Data requirements for launch:
 Railway backend recovery:
 
 - Run `npm run check:data-recovery` before any customer-facing demo or launch.
-- If Supabase EOD data is present but the Railway API returns fallback
+- First verify the dependency target. As of 2026-08-20, Railway health is HTTP
+  200 while `/api/v1/market/summary` is HTTP 503, and the production signed-in
+  smoke cannot prepare its QA account because
+  `fyxltykqdvacbdgmeucf.supabase.co` returns `ENOTFOUND`. Reconnect the actual
+  AlphaVyuh Supabase project and update matching GitHub/Railway secrets before
+  attempting a redeploy. Do not substitute an unrelated Supabase project.
+- If Supabase EOD data is present but the Railway API instead returns fallback
   `404 Application not found`, recover the backend before inviting users.
 - GitHub Actions recovery path:
 

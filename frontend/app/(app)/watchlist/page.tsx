@@ -50,12 +50,19 @@ import {
   getFundamentals,
   getBrokerStatus,
   getWorkflowStates,
+  getSetupReview,
   isMockMode,
   liveQuotePollingEnabled,
+  createSetup,
+  reviewSetup,
+  updateSetup,
   type PlaceOrderRequest,
+  type Setup,
+  type SetupReview,
   type WatchlistItemMetadataUpdate,
   type WorkflowLifecycle,
   type WorkflowState,
+  type UpdateSetupRequest,
   upsertWorkflowState,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
@@ -83,6 +90,7 @@ import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/cha
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { WorkflowDeskHeader } from "@/components/WorkflowDeskHeader";
 import { useOrderIntentKey } from "@/lib/order-intent";
+import { brokerOrderActionBarPresentation, canRouteLiveBrokerOrder } from "@/lib/broker-safety";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -138,13 +146,6 @@ function getSetupSignal(item: WatchlistItem): SetupSignal {
   if (move <= -2 && volume >= 1.3) return { label: "2% down + vol", tone: "loss", score: 28 };
   if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Flat range", tone: "neutral", score: 64 };
   return { label: "Watch", tone: "neutral", score: 50 };
-}
-
-function setupToneColor(tone: SetupSignal["tone"]) {
-  if (tone === "gain") return "var(--gain)";
-  if (tone === "loss") return "var(--loss)";
-  if (tone === "accent") return "var(--accent)";
-  return "var(--text-secondary)";
 }
 
 function formatCompactVolume(value: number): string {
@@ -509,15 +510,68 @@ function lifecycleLabel(value: WorkflowLifecycle) {
   return decisionLifecycleLabel({ lifecycle: value });
 }
 
+function workflowSetupDirection(draft: WorkflowState): "long" | "short" {
+  return draft.tags?.includes("short") ? "short" : "long";
+}
+
+function setupReviewInput(draft: WorkflowState): Partial<Setup> {
+  const direction = workflowSetupDirection(draft);
+  const entry = draft.entry ?? null;
+  const stop = draft.stop ?? null;
+  const quantity = draft.position_size ?? null;
+  const riskPerShare = entry != null && stop != null
+    ? direction === "short" ? stop - entry : entry - stop
+    : null;
+  return {
+    id: draft.setup_id ?? undefined,
+    symbol: draft.symbol,
+    direction,
+    status: "planned",
+    strategy_tag: draft.setup_type ?? null,
+    entry_low: entry,
+    entry_high: entry,
+    stop_price: stop,
+    target_price: draft.target ?? null,
+    planned_quantity: quantity,
+    planned_risk_amount: riskPerShare != null && quantity != null ? riskPerShare * quantity : null,
+    thesis: draft.thesis ?? null,
+    invalidation_reason: draft.invalidation_rule ?? null,
+    source: "watchlist",
+    source_scanner_candidate_id: draft.scanner_context?.candidate_id ?? null,
+    scanner_context: draft.scanner_context ?? null,
+  };
+}
+
+function setupUpdatePayload(draft: WorkflowState): UpdateSetupRequest {
+  const input = setupReviewInput(draft);
+  return {
+    direction: input.direction,
+    status: "planned",
+    strategy_tag: input.strategy_tag,
+    entry_low: input.entry_low,
+    entry_high: input.entry_high,
+    stop_price: input.stop_price,
+    target_price: input.target_price,
+    planned_quantity: input.planned_quantity,
+    thesis: input.thesis,
+    invalidation_reason: input.invalidation_reason,
+    source: input.source,
+    source_scanner_candidate_id: input.source_scanner_candidate_id,
+    scanner_context: input.scanner_context,
+  };
+}
+
 function DecisionDesk({
   symbol,
   watchlistId,
   plan,
   item,
   reviewState,
+  setupReview,
   expanded,
   onExpandedChange,
   onPlanChange,
+  onSetupReviewChange,
   onToast,
   onDraftOrder,
 }: {
@@ -526,9 +580,11 @@ function DecisionDesk({
   plan: WorkflowState | null;
   item: WatchlistItem | null;
   reviewState: DecisionRecordReviewState;
+  setupReview: SetupReview | null;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onPlanChange: (plan: WorkflowState) => void;
+  onSetupReviewChange: (symbol: string, review: SetupReview | null) => void;
   onToast: (msg: string) => void;
   onDraftOrder: (symbol: string) => void;
 }) {
@@ -536,6 +592,10 @@ function DecisionDesk({
   const draft = plan ?? { symbol, watchlist_id: watchlistId, source: "watchlist", lifecycle: "watch", timeframe: "D", tags: [] };
   const journalHref = decisionJournalHref(draft as WorkflowState);
   const hasTradePlan = Boolean(draft.entry && draft.stop && draft.target);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+  const direction = workflowSetupDirection(draft as WorkflowState);
   const requiredFields = [
     { key: "entry", label: "Entry", complete: Boolean(draft.entry && draft.entry > 0) },
     { key: "stop", label: "Stop", complete: Boolean(draft.stop && draft.stop > 0) },
@@ -580,21 +640,107 @@ function DecisionDesk({
     outline: "none",
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    setReviewError(null);
+    setOverrideReason("");
+    if (!draft.setup_id) {
+      onSetupReviewChange(symbol, null);
+      return () => { cancelled = true; };
+    }
+    setReviewBusy(true);
+    getSetupReview(draft.setup_id)
+      .then((review) => {
+        if (!cancelled) onSetupReviewChange(symbol, review);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          onSetupReviewChange(symbol, null);
+          setReviewError(error instanceof Error ? error.message : "Setup review is unavailable.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReviewBusy(false);
+      });
+    return () => { cancelled = true; };
+  }, [draft.setup_id, onSetupReviewChange, symbol]);
+
   async function patch(updates: Partial<WorkflowState>) {
-    const lifecycleFlags = updates.lifecycle ? workflowLifecycleFlags(updates.lifecycle) : {};
+    const reviewAffectingFields = ["entry", "stop", "target", "position_size", "thesis", "invalidation_rule", "tags"];
+    const needsNewReview = Object.keys(updates).some((key) => reviewAffectingFields.includes(key));
+    const nextUpdates = needsNewReview && draft.lifecycle === "ready"
+      ? { ...updates, lifecycle: "watch" as const }
+      : updates;
+    const lifecycleFlags = nextUpdates.lifecycle ? workflowLifecycleFlags(nextUpdates.lifecycle) : {};
     const next = await upsertWorkflowState({
       ...draft,
-      ...updates,
+      ...nextUpdates,
       ...lifecycleFlags,
       symbol,
       watchlist_id: watchlistId,
       source: draft.source ?? "watchlist",
     });
+    if (needsNewReview) {
+      onSetupReviewChange(symbol, null);
+      setReviewError(null);
+    }
     onPlanChange(next);
   }
 
+  async function ensureSetupForReview(): Promise<{ id: string; setup: Setup }> {
+    if (!Number.isInteger(draft.position_size) || (draft.position_size ?? 0) < 1) {
+      throw new Error("Position size must be a positive whole number.");
+    }
+    const input = setupReviewInput(draft as WorkflowState);
+    const update = setupUpdatePayload(draft as WorkflowState);
+    if (draft.setup_id) {
+      const updated = await updateSetup(draft.setup_id, update);
+      return { id: updated.id, setup: updated };
+    }
+    const created = await createSetup({
+      symbol,
+      direction: input.direction ?? "long",
+      strategy_tag: input.strategy_tag,
+      entry_low: input.entry_low,
+      entry_high: input.entry_high,
+      stop_price: input.stop_price,
+      target_price: input.target_price,
+      planned_quantity: input.planned_quantity,
+      thesis: input.thesis,
+      invalidation_reason: input.invalidation_reason,
+      source: "watchlist",
+      source_scanner_candidate_id: input.source_scanner_candidate_id,
+      scanner_context: input.scanner_context,
+    });
+    await patch({ setup_id: created.id });
+    return { id: created.id, setup: created };
+  }
+
+  async function runReview(reason = overrideReason): Promise<SetupReview | null> {
+    if (!status.valid) return null;
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      const { id, setup } = await ensureSetupForReview();
+      const result = await reviewSetup(id, {
+        override_reason: reason.trim() || null,
+      }, setup);
+      onSetupReviewChange(symbol, result);
+      if (!result.can_proceed) onToast(result.summary);
+      return result;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Setup review could not be recorded.";
+      setReviewError(message);
+      onToast(message);
+      return null;
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
   async function markReady() {
-    if (!status.valid) return;
+    const result = await runReview();
+    if (!result?.can_proceed) return;
     await patch({ lifecycle: "ready" });
     trackEvent("decision_desk_plan_ready", { symbol, watchlist_id: watchlistId ?? null });
     onToast(`${symbol} marked ready`);
@@ -617,14 +763,14 @@ function DecisionDesk({
             </button>
           ) : (
             <>
-              <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
+              <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid || reviewBusy} onClick={() => void markReady()} style={{ opacity: status.valid ? 1 : 0.45 }}>
                 Ready
               </button>
               <button
                 className="workspace-chip-button"
-                disabled={!hasTradePlan}
+                disabled={!hasTradePlan || draft.lifecycle !== "ready" || setupReview?.can_proceed !== true}
                 onClick={() => hasTradePlan ? onDraftOrder(symbol) : onToast("Complete entry, stop, and target first.")}
-                style={{ opacity: hasTradePlan ? 1 : 0.45 }}
+                style={{ opacity: hasTradePlan && draft.lifecycle === "ready" && setupReview?.can_proceed === true ? 1 : 0.45 }}
               >
                 Draft order
               </button>
@@ -666,6 +812,52 @@ function DecisionDesk({
             ? (riskReward ? `Ready for journal capture draft. Risk/reward ${riskReward}.` : "Ready for journal capture draft.")
             : (planNudges.length ? planNudges.join(" · ") : status.next)}
         </div>
+      </div>
+      <div
+        data-testid="setup-review-status"
+        style={{
+          marginBottom: 10,
+          padding: "8px 10px",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.07)",
+          background: setupReview?.overall_status === "passed" ? "rgba(27,191,114,0.055)" : setupReview?.overall_status === "blocked" ? "rgba(229,56,59,0.08)" : "rgba(217,119,6,0.08)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+          <div className="label">Setup review</div>
+          <span className="caption" style={{ color: setupReview?.overall_status === "passed" ? "var(--gain)" : setupReview?.overall_status === "blocked" ? "var(--loss)" : "var(--warn)" }}>
+            {reviewBusy ? "Checking..." : setupReview ? setupReview.overall_status : "Not evaluated"}
+          </span>
+        </div>
+        <div className="caption" style={{ marginTop: 4, lineHeight: 1.5 }}>
+          {reviewError ?? setupReview?.summary ?? "Run the recorded rulebook before marking this setup ready."}
+        </div>
+        {setupReview && setupReview.results.some((result) => result.status === "fail") && (
+          <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+            {setupReview.results.filter((result) => result.status === "fail").map((result) => (
+              <div key={result.code} className="caption" style={{ color: result.severity === "block" ? "var(--loss)" : "var(--warn)" }}>
+                {result.label}: {result.message}
+              </div>
+            ))}
+          </div>
+        )}
+        {setupReview?.overall_status === "warned" && !setupReview.can_proceed && (
+          <input
+            aria-label="Override reason"
+            placeholder="Reason for overriding the warning"
+            value={overrideReason}
+            onChange={(event) => setOverrideReason(event.target.value)}
+            style={{ ...inputStyle, marginTop: 8 }}
+          />
+        )}
+        <button
+          className="workspace-chip-button"
+          disabled={!status.valid || reviewBusy || (setupReview?.overall_status === "warned" && !setupReview.can_proceed && !overrideReason.trim())}
+          onClick={() => void runReview()}
+          style={{ marginTop: 8, opacity: status.valid && !reviewBusy ? 1 : 0.45 }}
+        >
+          {setupReview?.overall_status === "warned" && !setupReview.can_proceed ? "Acknowledge warning" : setupReview ? "Re-run setup review" : "Run setup review"}
+        </button>
       </div>
       <div
         data-testid="watchlist-decision-record"
@@ -746,6 +938,14 @@ function DecisionDesk({
         </div>
       )}
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
+        <select value={direction} onChange={(e) => {
+          const nextDirection = e.target.value as "long" | "short";
+          const tags = (draft.tags ?? []).filter((tag) => tag !== "long" && tag !== "short");
+          void patch({ tags: [...tags, nextDirection] });
+        }} style={inputStyle} aria-label="Trade direction">
+          <option value="long">Long</option>
+          <option value="short">Short</option>
+        </select>
         <select value={draft.lifecycle} onChange={(e) => patch({ lifecycle: e.target.value as WorkflowLifecycle })} style={inputStyle}>
           {LIFECYCLES.map((item) => <option key={item} value={item}>{lifecycleLabel(item)}</option>)}
         </select>
@@ -799,6 +999,7 @@ function ChartPanel({
   onOpenChartDraw,
   onStepSymbol,
   plan,
+  setupReview,
   planValid,
   planNextAction,
   orderDraftNonce,
@@ -814,6 +1015,7 @@ function ChartPanel({
   onOpenChartDraw: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
   plan: WorkflowState | null;
+  setupReview: SetupReview | null;
   planValid: boolean;
   planNextAction: string;
   orderDraftNonce?: number;
@@ -871,13 +1073,29 @@ function ChartPanel({
   })();
   const orderNudges = [
     ...(planValid ? [] : [planNextAction || "Complete the Decision Desk before order capture"]),
+    ...(planValid && (plan?.lifecycle !== "ready" || plan.setup_id == null || setupReview?.can_proceed !== true)
+      ? ["Run setup review and mark the plan Ready before journal capture"]
+      : []),
     ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; review risk before submitting"] : []),
     ...(chartRangeNote ? [chartRangeNote] : []),
     ...(brokerStatusError ? ["Broker status unavailable; order capture stays as a journal draft"] : []),
     ...(brokerStatus?.plan_allows_broker === false ? ["Broker import requires Pro or Elite"] : []),
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
-  const canRouteLiveOrder = false;
+  const canRouteLiveOrder = canRouteLiveBrokerOrder({
+    broker: brokerStatus,
+    unavailable: Boolean(brokerStatusError),
+    setupId: plan?.setup_id,
+    lifecycle: plan?.lifecycle,
+    reviewCanProceed: setupReview?.can_proceed,
+  });
+  const orderAction = brokerOrderActionBarPresentation({
+    broker: brokerStatus,
+    unavailable: Boolean(brokerStatusError),
+    canRouteLiveOrder,
+    liveConfirmed,
+    side,
+  });
   useEffect(() => {
     if (!orderDraftNonce) return;
     setShowOrderTicket(true);
@@ -1023,6 +1241,14 @@ function ChartPanel({
       setOrderMsg({ ok: false, text: planNextAction || "Complete the decision desk before drafting an order" });
       return;
     }
+    if (!plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true) {
+      setOrderMsg({ ok: false, text: "Run setup review and mark the plan Ready before journal capture." });
+      return;
+    }
+    if (canRouteLiveOrder && !liveConfirmed) {
+      setOrderMsg({ ok: false, text: "Confirm the complete order sheet before submitting to the broker." });
+      return;
+    }
     if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
       setOrderMsg({ ok: false, text: "Enter valid qty and price" });
       return;
@@ -1032,6 +1258,7 @@ function ChartPanel({
     try {
       const req: PlaceOrderRequest = {
         symbol,
+        setup_id: plan?.setup_id ?? null,
         side,
         quantity: qtyN,
         price: priceN,
@@ -1296,7 +1523,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Journal capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
+            <div className="caption">{canRouteLiveOrder ? "Review the order sheet, then explicitly confirm before AlphaVyuh sends it to your broker." : "Journal capture only: save the plan to Journal. Place any real trade directly with your broker."}</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1306,13 +1533,14 @@ function ChartPanel({
           )}
         </div>
 
-        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.03)", border: brokerStatusError ? "1px solid rgba(217,119,6,0.22)" : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: canRouteLiveOrder ? "rgba(217,119,6,0.08)" : brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.03)", border: canRouteLiveOrder || brokerStatusError ? "1px solid rgba(217,119,6,0.22)" : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <span data-testid="watchlist-order-broker-status" style={{ fontSize: 11, fontWeight: 700, color: brokerStatusError ? "var(--warn)" : brokerStatus?.connected ? "var(--gain)" : "var(--text-secondary)" }}>
-            {brokerStatusError ? "Broker status unavailable" : brokerStatus?.status_label ?? "Checking broker route..."}
+            {brokerStatusError ? "Broker status unavailable" : canRouteLiveOrder ? "Live order confirmation required" : brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
             {brokerStatusError
               ? `${brokerStatusError} Order capture stays as a journal draft.`
+              : canRouteLiveOrder ? `Review the order sheet and confirm before AlphaVyuh sends one ${brokerStatus?.broker ?? "broker"} request.`
               : brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
           </span>
         </div>
@@ -1320,7 +1548,7 @@ function ChartPanel({
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: canRouteLiveOrder ? "Live confirmation" : brokerStatus?.connected ? "Import only" : "Simulated", tone: canRouteLiveOrder ? "var(--warn)" : brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
@@ -1461,31 +1689,52 @@ function ChartPanel({
         )}
 
         {canRouteLiveOrder && (
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
-            <input
-              type="checkbox"
-              checked={liveConfirmed}
-              onChange={(event) => setLiveConfirmed(event.target.checked)}
-              style={{ marginTop: 2 }}
-            />
-            <span>
-              I confirm this is my own order decision and want AlphaVyuh to submit it to {brokerStatus?.broker ?? "the broker"}. I checked symbol, side, quantity, price, stop, target, and risk.
-            </span>
-          </label>
+          <div data-testid="live-order-confirmation" style={{ marginBottom: 10, padding: "10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "var(--warn)", marginBottom: 5 }}>Live order confirmation</div>
+            <div className="caption" style={{ lineHeight: 1.5, marginBottom: 8 }}>
+              Nothing is sent until you confirm this order sheet. The backend will re-check the setup review and idempotency key before the broker call.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6, marginBottom: 8 }}>
+              {[
+                ["Broker", brokerStatus?.broker ?? "—"],
+                ["Instrument", `NSE · ${symbol}`],
+                ["Side", side.toUpperCase()],
+                ["Quantity", qty || "—"],
+                ["Order", `${orderType.toUpperCase()}${orderType === "limit" ? ` · ₹${price || "—"}` : ""}`],
+                ["Stop / target", `${plan?.stop ?? "—"} / ${plan?.target ?? "—"}`],
+                ["Max risk", orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"],
+                ["Setup review", setupReview?.overall_status === "warned" ? "Warning acknowledged" : "Passed"],
+              ].map(([label, value]) => (
+                <div key={label} style={{ minWidth: 0 }}>
+                  <div className="caption" style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{label}</div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
+              <input
+                type="checkbox"
+                checked={liveConfirmed}
+                onChange={(event) => setLiveConfirmed(event.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span>I confirm this is my own order decision and want AlphaVyuh to submit it to {brokerStatus?.broker ?? "the broker"}. I checked symbol, side, quantity, price, stop, target, and risk.</span>
+            </label>
+          </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed)}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || orderAction.primaryDisabled}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
-            fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
-            opacity: orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed) ? 0.5 : 1,
+            fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true ? "not-allowed" : "pointer",
+            opacity: orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || orderAction.primaryDisabled ? 0.5 : 1,
           }}>
           {orderBusy
-            ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
-            : planValid
-              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save ${side === "buy" ? "buy" : "sell"} journal draft`
-              : planNextAction}
+            ? orderAction.savingLabel
+            : planValid && plan?.setup_id && plan.lifecycle === "ready" && setupReview?.can_proceed === true
+              ? orderAction.primaryLabel
+              : planValid ? "Run setup review and mark Ready" : planNextAction}
         </button>
         </div>
       )}
@@ -1534,6 +1783,7 @@ function WatchlistContent() {
   const [quotesAsOf, setQuotesAsOf] = useState<string | null>(null);
   const [liveQuotesError, setLiveQuotesError] = useState<string | null>(null);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
+  const [setupReviewsBySymbol, setSetupReviewsBySymbol] = useState<Record<string, SetupReview | null>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
   const pendingRouteSymbolRef = useRef<string | null>(null);
@@ -1564,6 +1814,10 @@ function WatchlistContent() {
     bumpKeyboardHintSession();
     setKeyboardHintSessions(readKeyboardHintSessions());
   }
+
+  const handleSetupReviewChange = useCallback((symbol: string, review: SetupReview | null) => {
+    setSetupReviewsBySymbol((previous) => ({ ...previous, [symbol]: review }));
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1815,22 +2069,53 @@ function WatchlistContent() {
       }
       const patch = buildWorkflowPatchFromChartDraft(draft, targetWatchlistId);
       appliedChartDrafts.current.add(appliedKey);
-      window.localStorage.removeItem(key);
-      setWorkflowBySymbol((prev) => ({
-        ...prev,
-        [draftSymbol]: {
-          ...(prev[draftSymbol] ?? { symbol: draftSymbol, lifecycle: "idea" as WorkflowLifecycle }),
-          ...patch,
-        },
-      }));
-      void upsertWorkflowState(patch);
-      trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      openOrderDraft(draftSymbol);
-      showToast("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
+      const applyDraft = async () => {
+        try {
+          const scannerContext = workflowBySymbol[draftSymbol]?.scanner_context ?? null;
+          const setup = await createSetup({
+            symbol: draft.symbol,
+            direction: draft.side,
+            strategy_tag: patch.setup_type,
+            entry_low: draft.entry,
+            entry_high: draft.entry,
+            stop_price: draft.stop,
+            target_price: draft.target,
+            thesis: draft.thesis,
+            invalidation_reason: draft.invalidationRule,
+            source: "chart",
+            source_scanner_candidate_id: scannerContext?.candidate_id ?? null,
+            scanner_context: scannerContext,
+            chart_snapshot: {
+              source: draft.source,
+              drawing_id: draft.drawingId,
+              timeframe: draft.timeframe,
+              entry_price: draft.entry,
+              captured_at: draft.createdAt,
+            },
+          });
+          const linkedPatch = { ...patch, setup_id: setup.id };
+          window.localStorage.removeItem(key);
+          setWorkflowBySymbol((prev) => ({
+            ...prev,
+            [draftSymbol]: {
+              ...(prev[draftSymbol] ?? { symbol: draftSymbol, lifecycle: "idea" as WorkflowLifecycle }),
+              ...linkedPatch,
+            },
+          }));
+          await upsertWorkflowState(linkedPatch);
+          trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward, setup_id: setup.id });
+          openOrderDraft(draftSymbol);
+          showToast("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
+        } catch {
+          appliedChartDrafts.current.delete(appliedKey);
+          showToast("Setup could not be saved. The chart plan is still available to retry.");
+        }
+      };
+      void applyDraft();
     } catch {
       showToast("Could not load chart plan draft");
     }
-  }, [activeId, chartSymbol, openOrderDraft, planDraftParam, symbolParam, watchlistIdParam, watchlists]);
+  }, [activeId, chartSymbol, openOrderDraft, planDraftParam, symbolParam, watchlistIdParam, watchlists, workflowBySymbol]);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
   const chartHref = useCallback((symbol: string, draw?: "trendline") => {
@@ -1928,6 +2213,7 @@ function WatchlistContent() {
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
   const selectedWorkflow = chartSymbol ? workflowBySymbol[chartSymbol] ?? null : null;
+  const selectedSetupReview = chartSymbol ? setupReviewsBySymbol[chartSymbol] ?? null : null;
   const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
   const decisionDeskExpanded = chartSymbol ? Boolean(decisionDeskExpandedMap[chartSymbol]) : false;
   const activeWorkflowStepIndex = WATCHLIST_QUEUE_STEPS.findIndex(
@@ -3036,6 +3322,7 @@ function WatchlistContent() {
                 onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
                 onStepSymbol={moveSelection}
                 plan={selectedWorkflow}
+                setupReview={selectedSetupReview}
                 planValid={selectedPlanStatus.valid}
                 planNextAction={selectedPlanStatus.next}
                 orderDraftNonce={orderDraftRequest?.symbol === chartSymbol ? orderDraftRequest.nonce : 0}
@@ -3048,11 +3335,13 @@ function WatchlistContent() {
               symbol={chartSymbol}
               watchlistId={activeWl?.id ?? null}
               plan={selectedWorkflow}
+              setupReview={selectedSetupReview}
               item={selectedItem}
               reviewState={selectedReviewState}
               expanded={decisionDeskExpanded}
               onExpandedChange={(expanded) => setDecisionDeskExpanded(chartSymbol, expanded)}
               onPlanChange={(next) => setWorkflowBySymbol((prev) => ({ ...prev, [next.symbol]: next }))}
+              onSetupReviewChange={handleSetupReviewChange}
               onToast={showToast}
               onDraftOrder={openOrderDraft}
             />

@@ -9,13 +9,16 @@ import {
   createFeedbackReport,
   createWatchlist,
   deleteScreen as deleteSavedScreen,
+  deleteScannerDefinition,
   getScreens as getCachedScreens,
+  getScannerDefinitions,
   getWatchlists as getCachedWatchlists,
   prefetchCandles,
   saveScreen as saveSavedScreen,
   shouldUseMockFallback as scannerUsesClientMockFallback,
   getPlanStatus,
   type SavedScreen,
+  type ScannerDefinition,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
@@ -64,12 +67,14 @@ import {
   type ScannerRowDensity,
 } from '@/lib/scanner-ui-preferences'
 import { ScannerChartsPanel } from '@/components/scanner/ScannerChartsPanel'
+import { ScannerDefinitionBuilder } from '@/components/scanner/ScannerDefinitionBuilder'
 import { ScannerFilterChips } from '@/components/scanner/ScannerFilterChips'
 import { ScannerScreenTabs } from '@/components/scanner/ScannerScreenTabs'
 import { ScannerSectorHeatmap } from '@/components/scanner/ScannerSectorHeatmap'
 import { ScannerSelectionPanel } from '@/components/scanner/ScannerSelectionPanel'
 import { ScannerTrustBanner } from '@/components/scanner/ScannerTrustBanner'
 import type { ScannerFilterState } from '@/lib/scanner-active-filters'
+import { scannerDefinitionToRunMapping } from '@/lib/scanner-definition'
 import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
 import { countResultsMissingCoreFundamentals, FUNDAMENTALS_UNAVAILABLE_TOOLTIP, SCANNER_FUNDAMENTAL_COLUMN_IDS } from '@/lib/company-display'
 import {
@@ -143,6 +148,8 @@ interface ScanResult {
   setup_grade?: string | null
   confidence_label?: string | null
   confidence_reasons?: string[]
+  scan_run_id?: string | null
+  candidate_id?: string | null
   market_cap_cr: number | null
   pe_ratio: number | null
   pb_ratio: number | null
@@ -187,6 +194,11 @@ type ScannerRunResponse = {
     license_notes?: string
     symbols_count?: number | null
   }
+  scan_run_id?: string | null
+  lineage?: {
+    status?: 'recorded' | 'unavailable'
+    scan_run_id?: string | null
+  }
 }
 
 interface Watchlist { id: string; name: string }
@@ -228,6 +240,7 @@ type ScannerRunRequestBody = {
   preset_id: string | null
   page: number
   page_size: number
+  scanner_definition_id?: string | null
 }
 
 const scannerRunInFlight = new Map<string, Promise<ScannerRunResponse>>()
@@ -700,6 +713,13 @@ export default function ScannerPage() {
   const [watchlistsError, setWatchlistsError] = useState('')
   const [savedScreens, setSavedScreens] = useState<SavedScreen[]>([])
   const [savedScreensError, setSavedScreensError] = useState('')
+  const [scannerDefinitions, setScannerDefinitions] = useState<ScannerDefinition[]>([])
+  const [scannerDefinitionsError, setScannerDefinitionsError] = useState('')
+  const [showDefinitionBuilder, setShowDefinitionBuilder] = useState(false)
+  const [editingDefinition, setEditingDefinition] = useState<ScannerDefinition | null>(null)
+  const [activeDefinitionId, setActiveDefinitionId] = useState<string | null>(null)
+  const [activeDefinitionName, setActiveDefinitionName] = useState<string | null>(null)
+  const [activeDefinitionUnsupported, setActiveDefinitionUnsupported] = useState<string[]>([])
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showWlModal, setShowWlModal] = useState(false)
   const [showAlertModal, setShowAlertModal] = useState(false)
@@ -774,6 +794,7 @@ export default function ScannerPage() {
     setRunHistory(readScannerRunHistory())
     loadWatchlists()
     loadSavedScreens()
+    loadScannerDefinitions()
   }, [])
 
   function showToast(msg: string) {
@@ -828,11 +849,79 @@ export default function ScannerPage() {
     }
   }
 
+  async function loadScannerDefinitions() {
+    try {
+      setScannerDefinitionsError('')
+      setScannerDefinitions(await getScannerDefinitions())
+    } catch (error) {
+      setScannerDefinitions([])
+      setScannerDefinitionsError(error instanceof Error ? error.message : 'Scanner definitions are temporarily unavailable.')
+    }
+  }
+
+  function clearActiveDefinition() {
+    setActiveDefinitionId(null)
+    setActiveDefinitionName(null)
+    setActiveDefinitionUnsupported([])
+  }
+
+  function applyScannerDefinition(definition: ScannerDefinition) {
+    const mapping = scannerDefinitionToRunMapping(definition)
+    const filterState = Object.fromEntries(
+      Object.entries(mapping.filters).map(([key, value]) => [
+        key,
+        typeof value === 'number' ? String(value) : value,
+      ]),
+    )
+    setFilters({ ...emptyFilters(), ...filterState } as Filters)
+    setActivePreset('normalized_definition')
+    setActiveScreenName(null)
+    setActiveScreenId(null)
+    setActiveCompositionName(null)
+    setActiveDefinitionId(definition.id)
+    setActiveDefinitionName(definition.name)
+    setActiveDefinitionUnsupported(mapping.unsupported)
+    setCurrentPage(1)
+    if (mapping.unsupported.length > 0) {
+      setError(`"${definition.name}" is saved, but cannot run yet: ${mapping.unsupported.join(' · ')}`)
+    } else {
+      setError('')
+    }
+  }
+
+  function openNewDefinitionBuilder() {
+    setEditingDefinition(null)
+    setShowDefinitionBuilder(true)
+  }
+
+  function handleDefinitionSaved(definition: ScannerDefinition) {
+    setScannerDefinitions((current) => [definition, ...current.filter((item) => item.id !== definition.id)])
+    setShowDefinitionBuilder(false)
+    setEditingDefinition(null)
+    applyScannerDefinition(definition)
+    showToast(`"${definition.name}" saved`)
+  }
+
+  async function handleDeleteDefinition(definition: ScannerDefinition) {
+    try {
+      await deleteScannerDefinition(definition.id)
+      setScannerDefinitions((current) => current.filter((item) => item.id !== definition.id))
+      if (activeDefinitionId === definition.id) {
+        clearActiveDefinition()
+        setActivePreset(null)
+      }
+      showToast(`"${definition.name}" deleted`)
+    } catch {
+      showToast('Scanner definition could not be deleted. Try again after checking Data Status.')
+    }
+  }
+
   const scannerRunLabel = useCallback((eventPreset: string | null | undefined) => {
     if (eventPreset === 'saved_screen') return activeScreenName ?? 'Saved screen'
+    if (eventPreset === 'normalized_definition') return activeDefinitionName ?? 'Scanner definition'
     if (eventPreset && eventPreset !== 'custom') return PRESETS.find(p => p.id === eventPreset)?.name ?? 'Custom scan'
     return 'Custom scan'
-  }, [activeScreenName])
+  }, [activeDefinitionName, activeScreenName])
 
   const scannerRunPresetId = useCallback((eventPreset: string | null | undefined) => {
     return eventPreset ?? 'custom'
@@ -900,6 +989,7 @@ export default function ScannerPage() {
     setFilters({ ...emptyFilters(), ...(entry.filters ?? {}) } as Filters)
     setActivePreset(entry.presetId === 'custom' ? null : entry.presetId)
     setActiveScreenName(entry.presetId === 'saved_screen' ? entry.label : null)
+    clearActiveDefinition()
     setHasRun(true)
     setHasCachedResults(true)
     setError('')
@@ -983,6 +1073,10 @@ export default function ScannerPage() {
   }, [])
 
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
+    if (activeDefinitionId && activeDefinitionUnsupported.length > 0) {
+      setError(`This definition cannot run yet: ${activeDefinitionUnsupported.join(' · ')}`)
+      return
+    }
     const requestSeq = beginScannerRequest()
     const hadResults = results.length > 0
     const scanStartedAt = performance.now()
@@ -1052,6 +1146,7 @@ export default function ScannerPage() {
       const data = await fetchScannerRunResponse({
         ...payload,
         preset_id: eventPreset === 'custom' || eventPreset === 'saved_screen' ? null : eventPreset,
+        scanner_definition_id: eventPreset === 'normalized_definition' ? activeDefinitionId : null,
         page,
         page_size: size,
       }, getAuthHeaders)
@@ -1118,7 +1213,7 @@ export default function ScannerPage() {
     } finally {
       if (isCurrentScannerRequest(requestSeq)) setLoading(false)
     }
-  }, [activePreset, beginScannerRequest, buildPayload, currentPage, filters, getAuthHeaders, isCurrentScannerRequest, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
+  }, [activeDefinitionId, activeDefinitionUnsupported, activePreset, beginScannerRequest, buildPayload, currentPage, filters, getAuthHeaders, isCurrentScannerRequest, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
 
   const selectPreset = useCallback((p: Preset) => {
     const f = presetFiltersForState(p)
@@ -1127,6 +1222,7 @@ export default function ScannerPage() {
     setActiveScreenName(null)
     setActiveScreenId(null)
     setActiveCompositionName(null)
+    clearActiveDefinition()
     setCurrentPage(1)
     const columns = readScannerVisibleColumns()
     setVisibleColumnIds(columns)
@@ -1187,6 +1283,7 @@ export default function ScannerPage() {
     setActiveScreenName(screen.name)
     setActiveScreenId(screen.id)
     setActiveCompositionName(null)
+    clearActiveDefinition()
     setCurrentPage(1)
     const columns = resolveInitialScannerColumns(screen.id)
     setVisibleColumnIds(columns)
@@ -1210,7 +1307,7 @@ export default function ScannerPage() {
   }
 
   function currentScanName() {
-    return activeCompositionName ?? activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
+    return activeCompositionName ?? activePresetMeta?.name ?? activeDefinitionName ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
   }
 
   function toggleCompositionScreen(screenId: string, checked: boolean) {
@@ -1290,6 +1387,7 @@ export default function ScannerPage() {
       setHasRun(true)
       setActivePreset('saved_screen')
       setActiveScreenName(null)
+      clearActiveDefinition()
       setActiveCompositionName(`${compositionMode.toUpperCase()} · ${label}`)
       writeScannerSnapshot({
         results: composed,
@@ -1404,13 +1502,13 @@ export default function ScannerPage() {
     const presetMeta = PRESETS.find(p => p.id === activePreset) ?? null
     return {
       presetId: activePreset,
-      presetName: activeCompositionName ?? presetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      presetName: activeCompositionName ?? presetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'normalized_definition' ? activeDefinitionName ?? 'Scanner definition' : activePreset === 'custom' ? 'Custom scan' : null),
       tradeDate,
       dataSource: scanTrust?.source ?? null,
       dataMode: scanTrust?.mode ?? null,
       dataAsOf: scanTrust?.asOf ?? tradeDate ?? null,
     }
-  }, [activeCompositionName, activePreset, activeScreenName, scanTrust?.asOf, scanTrust?.mode, scanTrust?.source, tradeDate])
+  }, [activeCompositionName, activeDefinitionName, activePreset, activeScreenName, scanTrust?.asOf, scanTrust?.mode, scanTrust?.source, tradeDate])
 
   async function addToWatchlist(symbol: string, wlId: string) {
     try {
@@ -1546,6 +1644,10 @@ export default function ScannerPage() {
 
   function setF(key: keyof Filters, val: unknown) {
     setFilters(f => ({ ...f, [key]: val }))
+    clearActiveDefinition()
+    setActivePreset('custom')
+    setActiveScreenName(null)
+    setActiveScreenId(null)
   }
 
   function rangeRow(label: string, minK: keyof Filters, maxK: keyof Filters) {
@@ -1627,6 +1729,7 @@ export default function ScannerPage() {
     setActivePreset(null)
     setActiveScreenName(null)
     setActiveScreenId(null)
+    clearActiveDefinition()
     setActiveCompositionName(null)
     setResults([])
     setError('')
@@ -1640,6 +1743,7 @@ export default function ScannerPage() {
       setActivePreset(null)
       setActiveScreenName(null)
       setActiveScreenId(null)
+      clearActiveDefinition()
       setFilters(emptyFilters())
       return
     }
@@ -1647,10 +1751,11 @@ export default function ScannerPage() {
     setActivePreset(null)
     setActiveScreenName(null)
     setActiveScreenId(null)
+    clearActiveDefinition()
   }
 
   const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
-  const activePresetLabel = activePresetMeta?.name ?? activeScreenName
+  const activePresetLabel = activePresetMeta?.name ?? activeDefinitionName ?? activeScreenName
   const selectedCompositionCount = savedScreens.filter(screen => selectedScreenIds.has(screen.id)).length
   const pageSizeOptions = [
     { value: 25, label: '25' },
@@ -1976,6 +2081,44 @@ export default function ScannerPage() {
             </button>
           </div>
         )}
+        <div className="workspace-section" data-testid="scanner-definitions-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 280, overflowY: 'auto', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <div className="label">Definitions</div>
+            <button type="button" className="workspace-chip-button" onClick={openNewDefinitionBuilder} data-testid="scanner-definition-new">
+              Build
+            </button>
+          </div>
+          {scannerDefinitions.length === 0 && !scannerDefinitionsError && (
+            <div className="caption" style={{ lineHeight: 1.5 }}>Store a reusable universe and filter tree for the scanner lineage.</div>
+          )}
+          {scannerDefinitions.map((definition) => {
+            const mapping = scannerDefinitionToRunMapping(definition)
+            const active = activeDefinitionId === definition.id
+            return (
+              <div key={definition.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                <button
+                  type="button"
+                  onClick={() => applyScannerDefinition(definition)}
+                  data-testid={`scanner-definition-use-${definition.id}`}
+                  style={{ flex: 1, textAlign: 'left', padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: 11, background: active ? 'var(--accent-subtle)' : 'var(--surface-2)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`, color: active ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {definition.name}
+                </button>
+                <button type="button" className="workspace-chip-button" onClick={() => { setEditingDefinition(definition); setShowDefinitionBuilder(true) }} aria-label={`Edit scanner definition ${definition.name}`} title={`Edit scanner definition ${definition.name}`}>
+                  Edit
+                </button>
+                <button type="button" onClick={() => void handleDeleteDefinition(definition)} aria-label={`Delete scanner definition ${definition.name}`} title={`Delete scanner definition ${definition.name}`} style={{ color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                {!mapping.runnable && <span title="This definition cannot run until its unsupported filters are resolved." style={{ color: 'var(--warn)', fontSize: 12 }}>!</span>}
+              </div>
+            )
+          })}
+          {scannerDefinitionsError && (
+            <div style={{ marginTop: 8 }}>
+              <div className="caption" style={{ color: 'var(--warn)', marginBottom: 6 }}>{scannerDefinitionsError}</div>
+              <button type="button" className="workspace-chip-button" onClick={loadScannerDefinitions}>Retry</button>
+            </div>
+          )}
+        </div>
         {savedScreensError && (
           <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
             <div className="label" style={{ marginBottom: 6, color: 'var(--warn)' }}>My screens unavailable</div>
@@ -2868,6 +3011,13 @@ export default function ScannerPage() {
           </div>
         )}
       </div>
+
+      <ScannerDefinitionBuilder
+        open={showDefinitionBuilder}
+        initialDefinition={editingDefinition}
+        onClose={() => { setShowDefinitionBuilder(false); setEditingDefinition(null) }}
+        onSaved={handleDefinitionSaved}
+      />
 
       {/* Save screen modal */}
       {showSaveModal && (

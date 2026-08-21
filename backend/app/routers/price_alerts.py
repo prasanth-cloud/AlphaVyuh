@@ -128,8 +128,22 @@ def check_price_alerts() -> None:
     """
     For each active price alert, fetch the latest close from daily_ohlcv.
     If condition is met, mark triggered and (optionally) send Telegram notification.
+
+    This runs in the background scheduler. A temporary data-store outage must
+    not become an unhandled scheduler exception or imply that alerts were
+    checked successfully; the next scheduled run will retry the read.
     """
     sb = get_admin_client()
+    try:
+        _check_price_alerts(sb)
+    except Exception as exc:
+        logger.warning(
+            "Price alert check skipped because the data store is unavailable; will retry next interval: %s",
+            exc,
+        )
+
+
+def _check_price_alerts(sb) -> None:
 
     # Load all active alerts
     res = sb.table("price_alerts").select("*").eq("is_active", True).execute()

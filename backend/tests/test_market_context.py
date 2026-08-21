@@ -52,6 +52,14 @@ def test_normalize_health_row_exposes_operator_fields():
         "last_bhavcopy_status": "success",
         "last_bhavcopy_rows": 990,
         "last_bhavcopy_source_url": "https://example.test/bhavcopy.csv",
+        "last_bhavcopy_quality_status": "passed",
+        "last_bhavcopy_source_rows": 990,
+        "last_bhavcopy_accepted_rows": 990,
+        "last_bhavcopy_filtered_series_rows": 0,
+        "last_bhavcopy_missing_required_rows": 0,
+        "last_bhavcopy_invalid_ohlcv_rows": 0,
+        "last_bhavcopy_duplicate_rows": 0,
+        "last_bhavcopy_quality_reasons": [],
     }
 
     health = normalize_health_row(row)
@@ -60,6 +68,8 @@ def test_normalize_health_row_exposes_operator_fields():
     assert health["mode"] == "eod"
     assert health["last_successful_eod_date"] == "2026-04-24"
     assert health["last_bhavcopy"]["status"] == "success"
+    assert health["last_bhavcopy"]["quality"]["status"] == "passed"
+    assert health["last_bhavcopy"]["quality"]["accepted_rows"] == 990
     assert health["provider"]["source_name"] == "NSE bhavcopy"
 
 
