@@ -7,6 +7,12 @@ import pandas as pd
 import requests
 
 from app.services import indicators as ta
+from app.services.eod_quality import (
+    assess_bhavcopy_frame,
+    finish_job_run,
+    quality_log_fields,
+    start_job_run,
+)
 from app.services.redis_cache import invalidate_scanner_cache
 from app.services.supabase import get_admin_client
 
@@ -233,17 +239,40 @@ async def download_and_ingest(trade_date: date) -> dict:
     client = get_admin_client()
     date_str = trade_date.strftime("%d%m%Y")
     source_url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
+    job_run = start_job_run(
+        client,
+        job_type="eod_bhavcopy",
+        trade_date=trade_date,
+        input_payload={"source_name": SOURCE_NAME, "source_url": source_url},
+    )
+    job_run_id = job_run.get("id") if job_run else None
+    quality: dict = {}
 
     if trade_date.weekday() >= 5:
+        quality = {
+            "quality_status": "skipped",
+            "source_rows": 0,
+            "accepted_rows": 0,
+            "filtered_series_rows": 0,
+            "missing_required_rows": 0,
+            "invalid_ohlcv_rows": 0,
+            "duplicate_rows": 0,
+            "rejected_rows": 0,
+            "reasons": ["weekend/non-trading day skipped before download"],
+        }
+        result = {"status": "skipped", "trade_date": str(trade_date), "reason": "weekend"}
         _upsert_ingest_log(client, {
             "trade_date": str(trade_date),
             "status": "skipped",
             "source_name": SOURCE_NAME,
             "source_url": source_url,
             "warning_message": "Weekend/non-trading day skipped before download.",
+            "job_run_id": job_run_id,
+            **quality_log_fields(quality),
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
-        return {"status": "skipped", "trade_date": str(trade_date), "reason": "weekend"}
+        finish_job_run(client, job_run, status="skipped", result=result)
+        return result
 
     # 1. Check if already ingested
     existing = client.table("bhavcopy_ingestion_log") \
@@ -251,7 +280,13 @@ async def download_and_ingest(trade_date: date) -> dict:
         .eq("trade_date", str(trade_date)) \
         .execute()
     if existing.data and existing.data[0]["status"] == "success" and (existing.data[0].get("rows_ingested") or 0) > 0:
-        return {"status": "already_done", "trade_date": str(trade_date), "rows_ingested": existing.data[0].get("rows_ingested")}
+        result = {
+            "status": "already_done",
+            "trade_date": str(trade_date),
+            "rows_ingested": existing.data[0].get("rows_ingested"),
+        }
+        finish_job_run(client, job_run, status="skipped", result=result)
+        return result
 
     # 2. Mark as pending
     attempt_count = 1
@@ -266,6 +301,8 @@ async def download_and_ingest(trade_date: date) -> dict:
         "source_name": SOURCE_NAME,
         "source_url": source_url,
         "attempt_count": attempt_count,
+        "job_run_id": job_run_id,
+        "quality_status": "running",
     })
 
     try:
@@ -277,15 +314,30 @@ async def download_and_ingest(trade_date: date) -> dict:
         response.raise_for_status()
 
         if len(response.content) < 500:
+            quality = {
+                "quality_status": "skipped",
+                "source_rows": 0,
+                "accepted_rows": 0,
+                "filtered_series_rows": 0,
+                "missing_required_rows": 0,
+                "invalid_ohlcv_rows": 0,
+                "duplicate_rows": 0,
+                "rejected_rows": 0,
+                "reasons": ["response too small; likely holiday or unpublished"],
+            }
+            result = {"status": "skipped", "trade_date": str(trade_date), "reason": "holiday_or_unpublished"}
             _upsert_ingest_log(client, {
                 "trade_date": str(trade_date),
                 "status": "skipped",
                 "source_name": SOURCE_NAME,
                 "source_url": source_url,
                 "warning_message": f"Response too small ({len(response.content)} bytes) — likely holiday/non-trading day.",
+                "job_run_id": job_run_id,
+                **quality_log_fields(quality),
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             })
-            return {"status": "skipped", "trade_date": str(trade_date), "reason": "holiday_or_unpublished"}
+            finish_job_run(client, job_run, status="skipped", result=result)
+            return result
 
         # 4. Parse CSV
         df = pd.read_csv(io.BytesIO(response.content))
@@ -301,22 +353,21 @@ async def download_and_ingest(trade_date: date) -> dict:
         if missing:
             raise ValueError(f"Missing columns after normalisation: {missing}. Available: {list(df.columns)}")
 
-        # 5. Filter valid series
-        df["series"] = df["series"].str.strip().str.upper()
-        df = df[df["series"].isin(VALID_SERIES)].copy()
-        df["symbol"] = df["symbol"].str.strip().str.upper()
+        # 5. Validate and normalize rows before any market-data write.
+        df, quality = assess_bhavcopy_frame(df, valid_series=VALID_SERIES)
+        if df.empty:
+            raise ValueError(
+                "No valid EOD rows remain after quality validation: "
+                + "; ".join(quality.get("reasons") or ["empty source"])
+            )
 
         if "company_name" not in df.columns:
             df["company_name"] = df["symbol"]
         else:
-            df["company_name"] = df["company_name"].str.strip()
+            df["company_name"] = df["company_name"].astype("string").str.strip()
 
         if "isin" not in df.columns:
             df["isin"] = None
-
-        for col in ["open", "high", "low", "close", "volume"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        df = df.dropna(subset=["open", "high", "low", "close", "volume"])
 
         if "prev_close" not in df.columns:
             df["prev_close"] = None
@@ -372,10 +423,12 @@ async def download_and_ingest(trade_date: date) -> dict:
         logger.info(f"Ingested {rows_ingested} rows for {trade_date}")
         expected_rows = _expected_active_rows(client)
         coverage_pct = round((rows_ingested / expected_rows) * 100, 2) if expected_rows else None
-        partial_ingest = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
+        coverage_partial = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
         warning_parts = []
-        if partial_ingest:
+        if coverage_partial:
             warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%).")
+        if quality.get("reasons"):
+            warning_parts.extend(quality["reasons"])
 
         # 8 & 9. Compute indicators via bulk fetch (one query, not N queries)
         update_batch = _compute_indicators_bulk(client, df["symbol"].unique().tolist(), trade_date)
@@ -404,7 +457,16 @@ async def download_and_ingest(trade_date: date) -> dict:
                 "error": str(rs_err)[:500],
             }
             warning_parts.append("RS score calculation failed; latest EOD OHLCV and breadth remain available.")
+            quality.setdefault("reasons", []).append("RS score calculation failed")
 
+        partial_ingest = bool(
+            coverage_partial
+            or quality.get("quality_status") == "partial"
+            or rs_score_result.get("status") == "failed"
+        )
+        if partial_ingest and quality.get("quality_status") == "passed":
+            quality["quality_status"] = "partial"
+        quality["pipeline_partial"] = partial_ingest
         warning_message = "; ".join(warning_parts) if warning_parts else None
 
         try:
@@ -421,6 +483,16 @@ async def download_and_ingest(trade_date: date) -> dict:
             logger.warning(f"market breadth snapshot failed for {trade_date}: {snapshot_err}")
 
         # 11. Log success
+        result = {
+            "status": "partial" if partial_ingest else "success",
+            "trade_date": str(trade_date),
+            "rows_ingested": rows_ingested,
+            "expected_rows": expected_rows,
+            "coverage_pct": coverage_pct,
+            "partial_ingest": partial_ingest,
+            "quality": quality,
+            "rs_score": rs_score_result,
+        }
         _upsert_ingest_log(client, {
             "trade_date": str(trade_date),
             "status": "partial" if partial_ingest else "success",
@@ -432,20 +504,14 @@ async def download_and_ingest(trade_date: date) -> dict:
             "coverage_pct": coverage_pct,
             "partial_ingest": partial_ingest,
             "warning_message": warning_message,
+            "job_run_id": job_run_id,
+            **quality_log_fields(quality),
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
 
         invalidate_scanner_cache(str(trade_date))
-
-        return {
-            "status": "partial" if partial_ingest else "success",
-            "trade_date": str(trade_date),
-            "rows_ingested": rows_ingested,
-            "expected_rows": expected_rows,
-            "coverage_pct": coverage_pct,
-            "partial_ingest": partial_ingest,
-            "rs_score": rs_score_result,
-        }
+        finish_job_run(client, job_run, status=result["status"], result=result)
+        return result
 
     except Exception as e:
         logger.error(f"Ingest failed for {trade_date}: {e}")
@@ -455,6 +521,9 @@ async def download_and_ingest(trade_date: date) -> dict:
             "error_message": str(e)[:500],
             "source_name": SOURCE_NAME,
             "source_url": source_url,
+            "job_run_id": job_run_id,
+            **quality_log_fields(quality),
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
+        finish_job_run(client, job_run, status="failed", error=str(e))
         raise

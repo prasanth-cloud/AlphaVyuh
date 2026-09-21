@@ -47,7 +47,7 @@ function isJournalReady(trade: ImportedTrade): boolean {
 function entryReason(trade: ImportedTrade, broker: string, marker: string): string {
   const outcome = trade.pnl >= 0 ? "profit" : "loss";
   const pct = trade.pnlPct == null ? "" : `, ${trade.pnlPct.toFixed(2)}%`;
-  return `Broker report import - ${broker}; source row ${trade.sourceRow}; ${outcome} ${trade.pnl}${pct}. [${marker}]`;
+  return `UNPLANNED trade — Broker report import - ${broker}; source row ${trade.sourceRow}; ${outcome} ${trade.pnl}${pct}. [${marker}]`;
 }
 
 function createEntryPayload(trade: ImportedTrade, broker: string, marker: string): CreateJournalEntry {
@@ -57,7 +57,7 @@ function createEntryPayload(trade: ImportedTrade, broker: string, marker: string
     entry_date: trade.entryDate ?? "",
     entry_price: trade.entryPrice ?? 0,
     quantity: trade.quantity ?? 0,
-    setup_type: "Broker report",
+    setup_type: "unplanned",
     entry_reason: entryReason(trade, broker, marker),
     source_page: "manual",
     source_context: `${broker} upload`,

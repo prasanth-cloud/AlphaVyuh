@@ -269,7 +269,14 @@ class KiteAdapter(BrokerAdapter):
             rows = kite_api.list_orders(creds.access_token)
         except KiteApiError as exc:
             raise _wrap(exc, broker_id="zerodha") from exc
-        return [_to_order(row, trades=[]) for row in rows]
+        # Keep the shared contract equity-only until derivatives have a
+        # dedicated instrument/order model. Without this filter, NFO/MCX/CDS
+        # orders would be silently relabeled as NSE by _to_order().
+        return [
+            _to_order(row, trades=[])
+            for row in rows
+            if str(row.get("exchange") or "").upper() in {"NSE", "BSE"}
+        ]
 
     def subscribe_fills(
         self, creds: BrokerCredentials, on_fill: FillCallback

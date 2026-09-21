@@ -68,6 +68,7 @@ function entryText(entry: JournalEntry) {
 
 function sourceForEntry(entry: JournalEntry): keyof DashboardImportSourceMix {
   const text = entryText(entry);
+  if (entry.source_page === "broker-import") return "imported";
   if (
     text.includes("alphavyuh-broker-import") ||
     text.includes("broker import") ||

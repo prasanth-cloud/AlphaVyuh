@@ -68,6 +68,10 @@ def get_holdings(access_token: str) -> list[dict[str, Any]]:
     return _request("GET", "/portfolio/long-term-holdings", access_token=access_token)["data"]
 
 
+def get_positions(access_token: str) -> list[dict[str, Any]]:
+    return _request("GET", "/portfolio/short-term-positions", access_token=access_token)["data"]
+
+
 def place_order(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _request("POST", "/order/place", access_token=access_token, data=payload, base_url=ORDER_BASE_URL)["data"]
 

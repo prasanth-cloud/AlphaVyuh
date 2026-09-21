@@ -10,6 +10,7 @@ const OPEN_TRADE = {
   entry_date: "2026-04-01",
   entry_price: 2800,
   quantity: 10,
+  setup_id: null,
   exit_price: null,
   exit_date: null,
   stop_loss: 2650,
@@ -33,6 +34,7 @@ const CLOSED_TRADE = {
   entry_date: "2026-03-01",
   entry_price: 3900,
   quantity: 5,
+  setup_id: null,
   exit_price: 4200,
   exit_date: "2026-03-20",
   stop_loss: 3750,
@@ -74,6 +76,54 @@ const ANALYTICS = {
   longest_dd_days: 4,
   recovery_factor: 4.29,
   profit_factor: 2.1,
+  cohort_breakdown: {
+    scanner: [],
+    sector: [],
+    holding_period: [],
+  },
+  sector_context: {
+    status: "available",
+    source: "stock_universe.sector",
+    note: "Test context only.",
+  },
+  mae_mfe: {
+    status: "available",
+    basis: "daily_ohlcv_eod_proxy",
+    trades_with_path: 1,
+    trades_without_path: 0,
+    intraday_trades: 0,
+    eod_proxy_trades: 1,
+    avg_mae_pct: -2.1,
+    avg_mfe_pct: 5.4,
+    avg_mae_r: -0.7,
+    avg_mfe_r: 1.8,
+    trades: [{
+      journal_entry_id: "trade-closed-1",
+      symbol: "TCS",
+      mae_pct: -2.1,
+      mfe_pct: 5.4,
+      mae_r: -0.7,
+      mfe_r: 1.8,
+      bars_count: 12,
+      basis: "daily_ohlcv_eod_proxy",
+    }],
+    reason: "EOD high/low proxy; capture a broker intraday path to improve coverage.",
+  },
+  review_summary: {
+    minimum_sample_size: 5,
+    reviewed_trades: 4,
+    unreviewed_closed_trades: 1,
+    linked_trades: 1,
+    unplanned_trades: 0,
+    sample_size_sufficient: false,
+    review_data_status: "available",
+    plan_adherence: [
+      { adherence: "followed", trades: 2, wins: 2, win_rate: 100, total_pnl: 1800, avg_pnl: 900 },
+      { adherence: "partial", trades: 1, wins: 0, win_rate: 0, total_pnl: -350, avg_pnl: -350 },
+      { adherence: "not_followed", trades: 0, wins: 0, win_rate: 0, total_pnl: 0, avg_pnl: 0 },
+      { adherence: "unknown", trades: 2, wins: 0, win_rate: 0, total_pnl: 50, avg_pnl: 25 },
+    ],
+  },
 };
 
 const AI_PATTERNS = {
@@ -91,6 +141,7 @@ const AI_PATTERNS = {
 
 type TradeFixture = {
   id: string; symbol: string; company_name: string; trade_type: string;
+  setup_id?: string | null;
   entry_date: string; entry_price: number; quantity: number;
   exit_price: number | null; exit_date: string | null;
   stop_loss: number; target_price: number; setup_type: string;
@@ -237,6 +288,14 @@ async function mockJournalRoutes(
         })
   );
 
+  await page.route("**/api/v1/broker/reconciliations*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ reconciliations: [], count: 0 }),
+    })
+  );
+
   // Symbol search
   await page.route("**/api/v1/charts/search*", (route) =>
     route.fulfill({
@@ -360,7 +419,7 @@ test.describe("Journal — account data unavailable states", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByTestId("journal-analytics-unavailable")).toContainText("Journal analytics are temporarily unavailable", { timeout: 15_000 });
     await expect(page.getByText("Close some trades to see analytics here.")).not.toBeVisible();
   });
@@ -432,7 +491,7 @@ test.describe("Journal — add trade", () => {
 
     await page.getByRole("button", { name: "Save trade" }).click();
 
-    await expect(postCalled).toBe(true);
+    await expect.poll(() => postCalled).toBe(true);
   });
 });
 
@@ -497,6 +556,72 @@ test.describe("Journal — view trade details", () => {
     await page.locator("table tbody tr").filter({ hasText: "RELIANCE" }).click();
     await expect(page.getByRole("button", { name: "Close this trade" })).toBeVisible();
   });
+
+  test("resolves an unplanned trade to an active durable setup", async ({ page }) => {
+    let patchPayload: Record<string, unknown> | null = null;
+    await page.route("**/api/v1/setups*", async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === "GET" && url.pathname.endsWith("/api/v1/setups")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            setups: [{
+              id: "setup-reliance-1",
+              user_id: "user-1",
+              symbol: "RELIANCE",
+              status: "ready",
+              direction: "long",
+              strategy_tag: "breakout",
+              entry_low: 2800,
+              entry_high: 2820,
+              stop_price: 2700,
+              target_price: 3100,
+              planned_risk_amount: 1000,
+              planned_quantity: 10,
+              planned_rr: 2.9,
+              thesis: "Range expansion with volume confirmation.",
+              invalidation_reason: "Closes below the base.",
+              source: "chart",
+              source_scanner_candidate_id: null,
+              scanner_context: null,
+              chart_snapshot: null,
+              created_at: "2026-08-01T10:00:00Z",
+              updated_at: "2026-08-02T10:00:00Z",
+            }],
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.route("**/api/v1/journal/trade-open-1", async (route) => {
+      if (route.request().method() === "PATCH") {
+        patchPayload = JSON.parse(route.request().postData() ?? "{}");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...OPEN_TRADE,
+            setup_id: "setup-reliance-1",
+            setup_type: "breakout",
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.locator("table tbody tr").filter({ hasText: "RELIANCE" }).click();
+    await expect(page.getByTestId("journal-setup-resolution")).toBeVisible();
+    await page.getByRole("button", { name: "Link Breakout setup" }).click();
+
+    await expect(page.getByTestId("journal-setup-linked")).toBeVisible();
+    expect(patchPayload).toMatchObject({ setup_id: "setup-reliance-1", setup_type: "breakout" });
+  });
 });
 
 test.describe("Journal — delete trade", () => {
@@ -534,7 +659,7 @@ test.describe("Journal — tab navigation", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
   });
 
@@ -545,6 +670,38 @@ test.describe("Journal — tab navigation", () => {
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Expectancy / trade", { timeout: 15_000 });
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Next review focus");
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Best setup");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("Process adherence");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("4 reviewed · 1 unreviewed");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("need 1 more completed review");
+  });
+
+  test("analytics can request a persisted Zerodha intraday path", async ({ page }) => {
+    let captureCalled = false;
+    await page.route("**/api/v1/journal/trade-closed-1/intraday-path", async (route) => {
+      captureCalled = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "path-1",
+          journal_id: "trade-closed-1",
+          symbol: "TCS",
+          broker: "zerodha",
+          interval: "15minute",
+          from_at: "2026-03-01T00:00:00Z",
+          to_at: "2026-03-20T18:29:59Z",
+          bar_count: 42,
+          capture_status: "available",
+          captured_at: "2026-08-21T12:00:00Z",
+        }),
+      });
+    });
+
+    await page.goto("/journal?tab=analytics", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("capture-intraday-path-trade-closed-1")).toBeVisible();
+    await page.getByTestId("capture-intraday-path-trade-closed-1").click();
+    await expect.poll(() => captureCalled).toBe(true);
+    await expect(page.getByTestId("journal-toast")).toContainText("42 Zerodha 15m bars captured");
   });
 
   test("Trade review tab switch shows 'Pattern stats' heading", async ({
@@ -574,7 +731,7 @@ test.describe("Journal — tab navigation", () => {
 
     await page.getByRole("button", { name: "Trade review" }).click();
     await expect(page.getByRole("heading", { name: "Pattern stats" })).toBeVisible();
-    await expect(patternsCalled).toBe(true);
+    await expect.poll(() => patternsCalled).toBe(true);
   });
 });
 
@@ -621,7 +778,97 @@ test.describe("Journal — broker sync import", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "Import from Zerodha" }).click();
-    await expect(importCalled).toBe(true);
+    await expect.poll(() => importCalled).toBe(true);
+  });
+
+  test("shows unmatched broker fills as a reconciliation warning", async ({ page }) => {
+    await mockJournalRoutes(page, { brokerConnected: true });
+    await page.route("**/api/v1/broker/zerodha/import", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          imported: 0,
+          skipped: 0,
+          unmatched_fills: 1,
+          unmatched_symbols: ["RELIANCE"],
+          reconciliation_status: "needs_review",
+          total_filled_orders: 1,
+          message: "Import needs review.",
+        }),
+      });
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Import from Zerodha" }).click();
+    const warning = page.getByTestId("journal-import-reconciliation-warning");
+    await expect(warning).toContainText("1 filled broker order could not be matched to an open journal entry");
+    await expect(warning).toContainText("RELIANCE");
+  });
+
+  test("loads and links a durable broker reconciliation to a matching Journal entry", async ({ page }) => {
+    let resolved = false;
+    await mockJournalRoutes(page, { brokerConnected: true });
+    const unresolved = {
+      reconciliations: [{
+        id: "reconciliation-1",
+        broker: "zerodha",
+        broker_order_id: "kite-order-1",
+        symbol: "RELIANCE",
+        side: "SELL",
+        filled_quantity: 10,
+        average_price: 2525,
+        executed_at: "2026-08-21T08:50:00Z",
+        status: "needs_review",
+        setup_id: null,
+        journal_id: null,
+        resolution_note: null,
+        last_seen_at: "2026-08-21T09:00:00Z",
+        created_at: "2026-08-21T09:00:00Z",
+        updated_at: "2026-08-21T09:00:00Z",
+      }],
+      count: 1,
+    };
+    const linked = {
+      id: "reconciliation-1",
+      broker: "zerodha",
+      broker_order_id: "kite-order-1",
+      symbol: "RELIANCE",
+      side: "SELL",
+      filled_quantity: 10,
+      average_price: 2525,
+      executed_at: "2026-08-21T08:50:00Z",
+      status: "linked",
+      setup_id: null,
+      journal_id: "trade-open-1",
+      resolution_note: null,
+      last_seen_at: "2026-08-21T09:00:00Z",
+      created_at: "2026-08-21T09:00:00Z",
+      updated_at: "2026-08-21T09:01:00Z",
+    };
+    await page.route("**/api/v1/broker/reconciliations?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(resolved ? { reconciliations: [], count: 0 } : unresolved),
+      });
+    });
+    await page.route("**/api/v1/broker/reconciliations/**", async (route) => {
+      resolved = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(linked) });
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    const row = page.getByTestId("journal-broker-reconciliation-reconciliation-1");
+    await expect(row).toContainText("RELIANCE");
+    await page.getByLabel("Journal entry for RELIANCE").selectOption("trade-open-1");
+    await row.getByRole("button", { name: "Link trade" }).click();
+    await expect(page.getByTestId("journal-toast")).toContainText("broker fill linked");
+    await expect(page.getByTestId("journal-broker-reconciliation-list")).toHaveCount(0);
   });
 
   test("broker import failure uses stable recovery copy", async ({ page }) => {

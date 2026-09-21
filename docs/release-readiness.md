@@ -78,11 +78,16 @@ checker tests that enforce daily candle depth, span, and coverage metadata.
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
-Railway recovery gate:
+Railway and Supabase recovery gate:
 
-- If `npm run check:data-recovery` fails because Supabase has fresh EOD rows but
-  Railway returns fallback `404 Application not found`, this is a backend hosting
-  recovery issue.
+- First verify the dependency target. On 2026-08-20 Railway health was HTTP 200,
+  while `/api/v1/market/summary` was HTTP 503 and the production signed-in
+  smoke failed to prepare its QA account because
+  `fyxltykqdvacbdgmeucf.supabase.co` returned `ENOTFOUND`. This is a Supabase
+  project/configuration blocker, not evidence that Railway needs redeployment.
+- If `npm run check:data-recovery` instead fails because Supabase has fresh EOD
+  rows but Railway returns fallback `404 Application not found`, treat that as a
+  separate backend hosting recovery issue.
 - Add Railway recovery secrets with:
 
 ```bash
@@ -98,6 +103,12 @@ npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
 ```
 
+- The Railway secret names are already present in the GitHub repository for the
+  current AlphaVyuh checkout. Before running recovery, confirm that their values
+  identify the actual AlphaVyuh Railway project and that `SUPABASE_URL`,
+  `SUPABASE_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, and the anon key all
+  refer to the same reachable AlphaVyuh Supabase project. Never point this app at
+  an unrelated project or create a replacement database as an implicit fix.
 - Or recover locally with `npm run recover:railway-backend:login`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.

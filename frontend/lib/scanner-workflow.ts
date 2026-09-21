@@ -17,6 +17,8 @@ type ScannerResultContext = {
   rsi_14?: number | null;
   close?: number | null;
   pct_change?: number | null;
+  scan_run_id?: string | null;
+  candidate_id?: string | null;
 };
 
 type ScannerContextOptions = {
@@ -26,6 +28,7 @@ type ScannerContextOptions = {
   dataSource?: string | null;
   dataMode?: string | null;
   dataAsOf?: string | null;
+  scanRunId?: string | null;
 };
 
 export function scannerIdeaContext(
@@ -54,6 +57,8 @@ export function scannerIdeaContext(
     data_source: options.dataSource ?? null,
     data_mode: options.dataMode ?? null,
     data_as_of: options.dataAsOf ?? options.tradeDate ?? null,
+    scan_run_id: result.scan_run_id ?? options.scanRunId ?? null,
+    candidate_id: result.candidate_id ?? null,
     captured_at: new Date().toISOString(),
   };
 }

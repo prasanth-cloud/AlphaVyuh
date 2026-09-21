@@ -106,6 +106,11 @@ backend/app/brokers/
 ### Upstox
 
 - Bearer tokens, OAuth2 standard flow. Separate sandbox environment — use it for tests.
+- Read-only positions use `GET /v2/portfolio/short-term-positions`; the shared
+  equity contract maps NSE/BSE rows and deliberately skips derivative,
+ commodity, and currency rows until their instrument model exists.
+- Read-only order imports apply the same NSE/BSE filter; unsupported derivative
+  orders are not relabeled as equity trades.
 
 ### Dhan
 
@@ -121,14 +126,30 @@ The frontend never calls broker APIs directly. It calls FastAPI routes:
 POST   /api/brokers/{broker}/connect/start    → returns { auth_url }
 GET    /api/brokers/{broker}/connect/callback → exchanges code, stores creds, redirects
 GET    /api/brokers/{broker}/profile          → BrokerProfile JSON
+GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
-POST   /api/brokers/{broker}/orders           → places order, returns OrderResult JSON
+GET    /api/brokers/{broker}/orders           → broker-reported equity orderbook JSON
+GET    /api/v1/broker/orders/activity         → normalized lifecycle records for review
+GET    /api/v1/broker/audit                   → owner-scoped, secret-free broker safety events
+POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled by default
 DELETE /api/brokers/{broker}/disconnect       → clears credentials
 ```
 
 Each route validates the Supabase JWT, loads the adapter, retrieves encrypted credentials
 via `credentials.get_broker_credential()`, calls the Python adapter method, and returns
 JSON matching the TypeScript DTOs.
+
+The adapter-backed orderbook is read-only and equity-only. Zerodha and Upstox rows whose
+exchange is not `NSE` or `BSE` are excluded until AlphaVyuh has a separate derivatives
+instrument model. The route returns broker order status and fill totals; it does not expose
+credentials, raw broker payloads, or any order mutation controls.
+
+Broker reads, OAuth state transitions, imports, order intent acceptance/submission,
+failures, and reconciliation are recorded in the owner-scoped `audit_logs` event trail.
+Metadata is redacted and bounded before persistence and again before the audit endpoint
+returns it. A live-confirmed order fails closed before the adapter call if its required
+intent-accepted event cannot be written. The audit migration is additive and must be
+applied and RLS-verified in the correct Supabase project before enabling live execution.
 
 ---
 
@@ -173,6 +194,13 @@ server-side `/api/v1/orders` route enforces this even if
    parseable `checked_at` timestamp no older than 24 hours. Missing, failed,
    stale, stale-shape, or different-broker metadata blocks with `409` before
    the adapter is called.
+4. A live-confirmed request must carry a durable setup in `ready`, `triggered`,
+   or `open` state. The setup must have a completed rule evaluation whose latest
+   `can_proceed` value is `true`; missing, stale, blocked, or unacknowledged
+   review state blocks with `409` before the adapter is called.
+5. Material setup edits (direction, entry, stop, target, quantity, thesis, or
+   invalidation rule) reset the setup review to `not_evaluated`; the plan must
+   be reviewed again before a live-confirmed request can proceed.
 
 This gate does not enable live or sandbox orders by itself. Owner approval is
 still required before changing the product posture from broker import/read-only
@@ -180,12 +208,19 @@ to any broker order mutation.
 
 ---
 
-## Idempotency
+## Idempotency and order confirmation
 
 Every `place_order` call must include a client-generated `idempotency_key` (UUID v4,
 ≤36 chars) stored in the `order_idempotency` DB table (migration 025). Before calling
 the broker, the adapter checks for an existing row. If found, it returns the cached
 `OrderResult` with `from_cache=True` without contacting the broker.
+
+The watchlist order ticket only exposes the live route when the broker status is
+connected and owner-enabled, the paid-plan check passes, the setup is `ready`, and
+the setup review allows proceeding. It then shows a confirmation sheet with broker,
+instrument, side, quantity, order type, price, stop, target, maximum risk, and review
+status. The user must explicitly confirm that sheet. Chart orders without a durable
+reviewed setup remain journal-capture drafts.
 
 ---
 

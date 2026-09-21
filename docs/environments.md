@@ -132,16 +132,25 @@ gh pr create --base main --title "feat: promote staging to prod"
 
 ### Railway backend recovery
 
-If `https://alphavyuh-production.up.railway.app/health` returns Railway fallback
-`404 Application not found`, the production API is not serving the FastAPI app.
-First prove whether the data store or the hosting layer is failing:
+First prove whether the data store, Supabase target, or hosting layer is failing:
 
 ```bash
 npm run check:data-recovery
 ```
 
-When the command reports fresh Supabase EOD rows but missing Railway deployment
-access, use one of these recovery paths.
+As of 2026-08-20, Railway `/healthz` returns HTTP 200 but
+`/api/v1/market/summary` returns HTTP 503. The production signed-in smoke
+failed before API checks because the configured Supabase hostname
+`fyxltykqdvacbdgmeucf.supabase.co` returned `ENOTFOUND`. Reconnect the actual
+AlphaVyuh Supabase project and update the matching GitHub/Railway secrets before
+attempting a backend redeploy. Do not point this environment at the unrelated
+Commuto or MenuDash projects, and do not create a replacement database without
+an explicit recovery decision.
+
+If the health endpoint instead returns Railway fallback `404 Application not
+found`, the production API is not serving the FastAPI app and the hosting layer
+needs recovery. When the command reports fresh Supabase EOD rows but missing
+Railway deployment access, use one of these recovery paths.
 
 GitHub Actions path:
 

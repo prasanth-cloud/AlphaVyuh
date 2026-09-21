@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { brokerActivityStatus, formatBrokerActivityTime } from "@/lib/broker-activity";
+import {
+  brokerActivityStatus,
+  brokerAuditEventDetail,
+  brokerAuditEventLabel,
+  formatBrokerActivityTime,
+} from "@/lib/broker-activity";
 import type { BrokerOrderActivityItem } from "@/lib/api";
 
 function activity(overrides: Partial<BrokerOrderActivityItem> = {}): BrokerOrderActivityItem {
@@ -60,5 +65,29 @@ describe("broker activity presentation", () => {
   it("handles unavailable timestamps safely", () => {
     expect(formatBrokerActivityTime("not-a-date")).toBe("Time unavailable");
     expect(formatBrokerActivityTime(null)).toBe("Time unavailable");
+  });
+
+  it("keeps audit event labels and details focused on safe lifecycle fields", () => {
+    expect(brokerAuditEventLabel("broker.order.submitted")).toBe("Order submitted");
+    expect(brokerAuditEventLabel("broker.unknown_event")).toBe("Unknown Event");
+    expect(brokerAuditEventDetail({
+      id: "audit-1",
+      event_type: "broker.order.submitted",
+      outcome: "submitted",
+      actor_type: "system",
+      broker: "upstox",
+      broker_order_id: "order-1",
+      idempotency_key: "intent-1",
+      setup_id: null,
+      journal_id: null,
+      metadata: {
+        symbol: "reliance",
+        execution_status: "PENDING",
+        quantity: 5,
+        filled_quantity: 0,
+        access_token: "must-not-render",
+      },
+      created_at: "2026-06-18T14:00:00Z",
+    })).toBe("RELIANCE · PENDING · 0/5 filled");
   });
 });

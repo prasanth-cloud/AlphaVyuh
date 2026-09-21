@@ -6,7 +6,9 @@ Routes:
   POST   /api/brokers/{broker}/connect/start      → { auth_url }
   GET    /api/brokers/{broker}/connect/callback   → exchanges code, stores creds, redirects
   GET    /api/brokers/{broker}/profile            → BrokerProfile JSON
+  GET    /api/brokers/{broker}/positions          → Position[] JSON
   GET    /api/brokers/{broker}/holdings           → Holding[] JSON
+  GET    /api/brokers/{broker}/orders             → broker-reported equity orderbook JSON
   DELETE /api/brokers/{broker}/disconnect         → clears credentials
 
 See docs/broker-adapter.md for the frontend→backend flow.
@@ -21,7 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
-from app.brokers.adapter import BrokerCredentials, BrokerError, BrokerId
+from app.brokers.adapter import BrokerCredentials, BrokerError, BrokerId, Order
 from app.brokers.credentials import (
     delete_broker_credentials,
     get_broker_credential,
@@ -34,6 +36,7 @@ from app.brokers.oauth_state import (
     verify_broker_oauth_state,
 )
 from app.middleware.auth import get_current_user_id
+from app.services.audit_log import record_broker_audit_event
 from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
@@ -48,6 +51,30 @@ def _validate_broker(broker: str) -> BrokerId:
     if broker not in _VALID_BROKERS:
         raise HTTPException(status_code=404, detail=f"Unknown broker: {broker!r}")
     return broker  # type: ignore[return-value]
+
+
+def _record_broker_audit(
+    *,
+    user_id: str,
+    broker: str,
+    event_type: str,
+    outcome: str,
+    metadata: dict[str, Any] | None = None,
+    broker_order_id: str | None = None,
+) -> None:
+    """Keep adapter activity visible without making read-only UI fail closed."""
+    try:
+        record_broker_audit_event(
+            user_id=user_id,
+            event_type=event_type,
+            outcome=outcome,
+            actor_type="system" if event_type.endswith("read") or "smoke" in event_type else "user",
+            broker=broker,
+            broker_order_id=broker_order_id,
+            metadata=metadata,
+        )
+    except Exception:
+        logger.warning("Broker audit recording failed event_type=%s broker=%s user_id=%s", event_type, broker, user_id, exc_info=True)
 
 
 def _load_creds(user_id: str, broker: BrokerId) -> BrokerCredentials:
@@ -181,10 +208,24 @@ async def connect_start(
         auth_url = adapter.get_auth_url(state)
     except KeyError as exc:
         missing = str(exc).strip("'")
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.connection.oauth_failed",
+            outcome="failed",
+            metadata={"reason": "configuration_missing", "missing_key": missing},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"{broker_id} connect is not configured: missing {missing}",
         ) from exc
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.connection.oauth_started",
+        outcome="accepted",
+        metadata={"flow": "oauth"},
+    )
     return {"auth_url": auth_url, "state": state}
 
 
@@ -215,6 +256,13 @@ async def connect_callback(
         creds = await adapter.exchange_code(auth_code)
     except BrokerError as exc:
         logger.warning("Broker %s code exchange failed: %s", broker_id, exc)
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            metadata={"reason": exc.kind},
+        )
         raise HTTPException(status_code=400, detail=str(exc))
 
     upsert_broker_credential(user_id, broker_id, "access_token", creds.access_token)
@@ -246,6 +294,14 @@ async def connect_callback(
     except Exception:
         logger.debug("Connected %s but could not fetch profile metadata.", broker_id, exc_info=True)
 
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.connection.connected",
+        outcome="recorded",
+        metadata={"profile_available": bool(profile) if "profile" in locals() else False},
+    )
+
     redirect_to = f"{_FRONTEND_URL}/settings/broker?connected={broker_id}"
     return RedirectResponse(url=redirect_to, status_code=302)
 
@@ -263,8 +319,21 @@ async def get_broker_profile(
     try:
         profile = await adapter.get_profile(creds)
     except BrokerError as exc:
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.profile.read",
+            outcome="failed",
+            metadata={"error_kind": exc.kind},
+        )
         _raise_for_broker_error(exc)
 
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.profile.read",
+        outcome="recorded",
+    )
     return profile.model_dump()
 
 
@@ -281,9 +350,123 @@ async def get_broker_holdings(
     try:
         holdings = await adapter.get_holdings(creds)
     except BrokerError as exc:
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.holdings.read",
+            outcome="failed",
+            metadata={"error_kind": exc.kind},
+        )
         _raise_for_broker_error(exc)
 
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.holdings.read",
+        outcome="recorded",
+        metadata={"count": len(holdings)},
+    )
     return [h.model_dump() for h in holdings]
+
+
+@router.get("/{broker}/positions")
+async def get_broker_positions(
+    broker: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    _require_broker_plan(user_id)
+    broker_id = _validate_broker(broker)
+    creds = _load_creds(user_id, broker_id)
+    adapter = get_adapter(broker_id)
+
+    try:
+        positions = await adapter.get_positions(creds)
+    except BrokerError as exc:
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.positions.read",
+            outcome="failed",
+            metadata={"error_kind": exc.kind},
+        )
+        _raise_for_broker_error(exc)
+
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.positions.read",
+        outcome="recorded",
+        metadata={"count": len(positions)},
+    )
+    return [position.model_dump() for position in positions]
+
+
+def _broker_order_snapshot(order: Order) -> dict[str, Any]:
+    """Return the secret-free, equity orderbook contract used by the UI."""
+    return {
+        "broker_order_id": str(order.broker_order_id),
+        "symbol": order.symbol,
+        "exchange": order.exchange,
+        "side": order.side,
+        "order_type": order.order_type,
+        "product": order.product,
+        "status": order.status,
+        "quantity": order.quantity,
+        "filled_quantity": order.filled_quantity,
+        "average_price": order.average_price,
+        "limit_price": order.limit_price,
+        "trigger_price": order.trigger_price,
+        "placed_at": order.placed_at.isoformat(),
+        "updated_at": order.updated_at.isoformat(),
+        "rejection_reason": order.rejection_reason,
+    }
+
+
+@router.get("/{broker}/orders")
+async def get_broker_orders(
+    broker: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Return a broker-reported, read-only equity orderbook snapshot.
+
+    This is deliberately separate from AlphaVyuh's internal order lifecycle
+    timeline. It only calls the adapter's list_orders method and cannot place,
+    modify, cancel, or reconcile an order.
+    """
+    _require_broker_plan(user_id)
+    broker_id = _validate_broker(broker)
+    creds = _load_creds(user_id, broker_id)
+    adapter = get_adapter(broker_id)
+
+    try:
+        orders = await adapter.list_orders(creds)
+    except BrokerError as exc:
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.orderbook.read",
+            outcome="failed",
+            metadata={"error_kind": exc.kind},
+        )
+        _raise_for_broker_error(exc)
+
+    ordered = sorted(orders, key=lambda order: order.updated_at, reverse=True)
+    snapshots = [_broker_order_snapshot(order) for order in ordered[:limit]]
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.orderbook.read",
+        outcome="recorded",
+        metadata={"count": len(snapshots)},
+    )
+    return {
+        "broker": broker_id,
+        "orders": snapshots,
+        "count": len(snapshots),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _smoke_metadata(*, broker: BrokerId, passed: bool, checked_at: str, checks: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -345,6 +528,13 @@ async def broker_read_only_smoke(
             last_synced_at=checked_at,
             metadata=_smoke_metadata(broker=broker_id, passed=False, checked_at=checked_at, checks=checks),
         )
+        _record_broker_audit(
+            user_id=user_id,
+            broker=broker_id,
+            event_type="broker.read_only_smoke.completed",
+            outcome="failed",
+            metadata={"passed": False, "checks": checks},
+        )
         return {
             "broker": broker_id,
             "connected_read_only": False,
@@ -402,6 +592,13 @@ async def broker_read_only_smoke(
         last_synced_at=checked_at,
         metadata=_smoke_metadata(broker=broker_id, passed=passed, checked_at=checked_at, checks=checks),
     )
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.read_only_smoke.completed",
+        outcome="recorded" if passed else "failed",
+        metadata={"passed": passed, "checks": checks},
+    )
     return {
         "broker": broker_id,
         "connected_read_only": passed,
@@ -419,6 +616,12 @@ async def disconnect_broker(
     broker_id = _validate_broker(broker)
     delete_broker_credentials(user_id, broker_id)
     _mark_broker_disconnected(user_id, broker_id)
+    _record_broker_audit(
+        user_id=user_id,
+        broker=broker_id,
+        event_type="broker.connection.disconnected",
+        outcome="recorded",
+    )
     return {"disconnected": broker_id}
 
 

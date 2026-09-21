@@ -23,22 +23,30 @@ export function BrokerActivityTimeline() {
   const [error, setError] = useState("");
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const result = await getBrokerOrderActivity();
       setOrders(result.orders);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Broker activity is temporarily unavailable.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!orders.some((order) => order.requires_reconciliation && order.broker_order_id)) return;
+    const interval = window.setInterval(() => void load({ silent: true }), 30_000);
+    return () => window.clearInterval(interval);
+  }, [load, orders]);
 
   async function reconcile(order: BrokerOrderActivityItem) {
     if (!order.broker_order_id) return;
@@ -47,6 +55,7 @@ export function BrokerActivityTimeline() {
     try {
       await reconcileBrokerOrder(order.broker_order_id);
       await load();
+      window.dispatchEvent(new Event("alphavyuh:broker-audit-updated"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Broker reconciliation failed.");
     } finally {
@@ -74,6 +83,11 @@ export function BrokerActivityTimeline() {
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.55 }}>
             Submitted is not filled. Only broker-reported fills become Journal positions.
           </div>
+          {orders.some((order) => order.requires_reconciliation && order.broker_order_id) ? (
+            <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginTop: 5 }}>
+              Pending broker orders are rechecked every 30 seconds while this page is open.
+            </div>
+          ) : null}
         </div>
         <button type="button" onClick={() => void load()} disabled={loading} className="workspace-chip-button">
           <RefreshCw size={12} style={{ display: "inline", marginRight: 6 }} />

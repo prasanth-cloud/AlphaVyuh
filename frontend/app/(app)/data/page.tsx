@@ -552,6 +552,8 @@ export default function DataFreshnessPage() {
               ["Sector industry scope", sectorTaxonomy.industryScope],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
+              ["EOD quality", health?.last_bhavcopy?.quality?.status ? `${health.last_bhavcopy.quality.status} · ${health.last_bhavcopy.quality.accepted_rows ?? 0}/${health.last_bhavcopy.quality.source_rows ?? 0} accepted` : "Not available"],
+              ["Quality rejects", health?.last_bhavcopy?.quality ? `${(health.last_bhavcopy.quality.filtered_series_rows ?? 0) + (health.last_bhavcopy.quality.missing_required_rows ?? 0) + (health.last_bhavcopy.quality.invalid_ohlcv_rows ?? 0) + (health.last_bhavcopy.quality.duplicate_rows ?? 0)}` : "Not available"],
               ["Bhavcopy error", health?.last_bhavcopy?.error_message ?? "None"],
               ["Bhavcopy warning", health?.last_bhavcopy?.warning_message ?? "None"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],

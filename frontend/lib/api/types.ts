@@ -51,6 +51,8 @@ export type ScanResult = {
   setup_grade?: string | null;
   confidence_label?: string | null;
   confidence_reasons?: string[];
+  scan_run_id?: string | null;
+  candidate_id?: string | null;
   market_cap_cr?: number | null;
   pe_ratio?: number | null;
   pb_ratio?: number | null;
@@ -156,6 +158,11 @@ export type ScanResponse = {
   coverage_pct?: number | null;
   universe_size?: number | null;
   message?: string;
+  scan_run_id?: string | null;
+  lineage?: {
+    status?: "recorded" | "unavailable";
+    scan_run_id?: string | null;
+  };
   results: ScanResult[];
 };
 
@@ -237,6 +244,63 @@ export type SavedScreen = {
   created_at: string;
 };
 
+export type ScannerUniverse = "all_nse" | "nifty500" | "nifty_midsmallcap_400" | "custom";
+export type ScannerFilterOperator = "and" | "or";
+
+export type ScannerFilter = {
+  id: string;
+  user_id?: string;
+  group_id: string;
+  kind: string;
+  value: unknown;
+  sort_order: number;
+  created_at?: string;
+};
+
+export type ScannerFilterGroup = {
+  id: string;
+  user_id?: string;
+  scanner_definition_id: string;
+  operator: ScannerFilterOperator;
+  sort_order: number;
+  filters: ScannerFilter[];
+  created_at?: string;
+};
+
+export type ScannerDefinition = {
+  id: string;
+  user_id?: string;
+  name: string;
+  universe: ScannerUniverse;
+  definition: Record<string, unknown>;
+  is_active: boolean;
+  groups: ScannerFilterGroup[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScannerDefinitionGroupInput = {
+  operator: ScannerFilterOperator;
+  sort_order: number;
+  filters: Array<{
+    kind: string;
+    value: unknown;
+    sort_order: number;
+  }>;
+};
+
+export type CreateScannerDefinitionRequest = {
+  name: string;
+  universe: ScannerUniverse;
+  definition: Record<string, unknown>;
+  groups: ScannerDefinitionGroupInput[];
+};
+
+export type UpdateScannerDefinitionRequest = Partial<Pick<CreateScannerDefinitionRequest, "name" | "universe" | "definition">> & {
+  is_active?: boolean;
+  groups?: ScannerDefinitionGroupInput[];
+};
+
 export type WatchlistItemMetadataUpdate = {
   pinned?: boolean;
   tags?: string[];
@@ -255,10 +319,131 @@ export type WorkflowLifecycle =
   | "ignored"
   | "review_later";
 
+export type SetupDirection = "long" | "short";
+export type SetupStatus = "planned" | "ready" | "triggered" | "open" | "closed" | "invalidated" | "cancelled";
+export type SetupSource = "scanner" | "chart" | "watchlist" | "manual";
+export type SetupReviewStatus = "not_evaluated" | "passed" | "warned" | "blocked";
+
+export type Setup = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  status: SetupStatus;
+  direction: SetupDirection;
+  strategy_tag: string | null;
+  entry_low: number | null;
+  entry_high: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+  planned_risk_amount: number | null;
+  planned_quantity: number | null;
+  planned_rr: number | null;
+  thesis: string | null;
+  invalidation_reason: string | null;
+  source: SetupSource;
+  source_scanner_candidate_id?: string | null;
+  review_status?: SetupReviewStatus;
+  rulebook_id?: string | null;
+  last_reviewed_at?: string | null;
+  scanner_context: Record<string, unknown> | null;
+  chart_snapshot: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateSetupRequest = {
+  symbol: string;
+  direction: SetupDirection;
+  status?: SetupStatus;
+  strategy_tag?: string | null;
+  entry_low?: number | null;
+  entry_high?: number | null;
+  stop_price?: number | null;
+  target_price?: number | null;
+  planned_quantity?: number | null;
+  thesis?: string | null;
+  invalidation_reason?: string | null;
+  source?: SetupSource;
+  source_scanner_candidate_id?: string | null;
+  scanner_context?: Record<string, unknown> | null;
+  chart_snapshot?: Record<string, unknown> | null;
+};
+
+export type UpdateSetupRequest = Partial<Omit<CreateSetupRequest, "symbol">>;
+
+export type SetupReviewRuleSeverity = "block" | "warn" | "check" | "info";
+export type SetupReviewRuleStatus = "pass" | "fail" | "not_evaluated";
+
+export type SetupReviewRule = {
+  code: string;
+  label: string;
+  severity: SetupReviewRuleSeverity;
+  status: SetupReviewRuleStatus;
+  message: string;
+  actual?: unknown;
+  expected?: unknown;
+  config?: Record<string, unknown>;
+};
+
+export type SetupReview = {
+  id?: string | null;
+  setup_id: string;
+  rulebook_id: string;
+  overall_status: Exclude<SetupReviewStatus, "not_evaluated">;
+  can_proceed: boolean;
+  summary: string;
+  override_reason?: string | null;
+  results: SetupReviewRule[];
+  input_snapshot?: Record<string, unknown>;
+  evaluated_at?: string | null;
+};
+
+export type SetupReviewRequest = {
+  rulebook_id?: string | null;
+  account_equity?: number | null;
+  override_reason?: string | null;
+};
+
+export type RulebookRule = {
+  id?: string;
+  code: string;
+  label: string;
+  severity: SetupReviewRuleSeverity;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  sort_order: number;
+};
+
+export type Rulebook = {
+  id: string;
+  user_id?: string;
+  name: string;
+  description: string | null;
+  min_planned_rr: number | null;
+  max_risk_amount: number | null;
+  max_account_risk_pct: number | null;
+  is_default: boolean;
+  active: boolean;
+  rules: RulebookRule[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CreateRulebookRequest = {
+  name: string;
+  description?: string | null;
+  min_planned_rr?: number | null;
+  max_risk_amount?: number | null;
+  max_account_risk_pct?: number | null;
+  is_default?: boolean;
+  rules?: Omit<RulebookRule, "id">[];
+};
+
 export type WorkflowState = {
   id?: string;
   user_id?: string;
   symbol: string;
+  setup_id?: string | null;
   watchlist_id?: string | null;
   source?: string;
   lifecycle: WorkflowLifecycle;
@@ -306,6 +491,8 @@ export type ScannerIdeaContext = {
   data_source?: string | null;
   data_mode?: string | null;
   data_as_of?: string | null;
+  scan_run_id?: string | null;
+  candidate_id?: string | null;
   captured_at?: string;
   chart_snapshot?: {
     chart_url: string;
@@ -478,6 +665,7 @@ export type JournalEntry = {
   id: string;
   user_id: string;
   symbol: string;
+  setup_id?: string | null;
   company_name: string | null;
   trade_type: "long" | "short";
   setup_type: string | null;
@@ -497,13 +685,38 @@ export type JournalEntry = {
   mistakes: string | null;
   lessons: string | null;
   status: "open" | "closed" | "cancelled";
-  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | "broker-import" | null;
   source_context?: string | null;
   scanner_context?: ScannerIdeaContext | null;
   thesis?: string | null;
   invalidation_rule?: string | null;
+  review?: TradeReview | null;
   created_at: string;
   updated_at: string;
+};
+
+export type TradeReview = {
+  id: string;
+  user_id: string;
+  journal_entry_id: string;
+  setup_id: string | null;
+  status: "draft" | "completed";
+  plan_adherence: "followed" | "partial" | "not_followed" | "unknown";
+  mistakes: string | null;
+  lesson: string | null;
+  follow_up: string | null;
+  source: "manual" | "generated" | "journal_sync";
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TradeReviewRequest = {
+  plan_adherence?: TradeReview["plan_adherence"];
+  mistakes?: string | null;
+  lesson?: string | null;
+  follow_up?: string | null;
+  source?: "manual" | "generated";
 };
 
 export type JournalStats = {
@@ -519,8 +732,78 @@ export type JournalStats = {
   avg_holding_days: number;
 };
 
+export type JournalAnalyticsAdherence = "followed" | "partial" | "not_followed" | "unknown";
+
+export type JournalAnalyticsAdherenceRow = {
+  adherence: JournalAnalyticsAdherence;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+};
+
+export type JournalAnalyticsReviewSummary = {
+  minimum_sample_size: number;
+  reviewed_trades: number;
+  unreviewed_closed_trades: number;
+  linked_trades: number;
+  unplanned_trades: number;
+  sample_size_sufficient: boolean;
+  review_data_status?: "available" | "unavailable";
+  plan_adherence: JournalAnalyticsAdherenceRow[];
+};
+
+export type JournalAnalyticsCohortRow = {
+  cohort: string;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+  avg_r_multiple: number | null;
+  reviewed_trades: number;
+};
+
+export type JournalAnalyticsCohortBreakdown = {
+  scanner: JournalAnalyticsCohortRow[];
+  sector: JournalAnalyticsCohortRow[];
+  holding_period: JournalAnalyticsCohortRow[];
+};
+
+export type JournalAnalyticsRMultipleSummary = {
+  trades: number;
+  available_trades: number;
+  missing_risk_plan: number;
+  positive_trades: number;
+  negative_trades: number;
+  win_rate: number | null;
+  total_r: number | null;
+  expectancy_r: number | null;
+  avg_winner_r: number | null;
+  avg_loser_r: number | null;
+};
+
+export type JournalAnalyticsPeriod = {
+  from_date: string | null;
+  to_date: string | null;
+  trade_count: number;
+};
+
+export type JournalAnalyticsSectorContext = {
+  status: "available" | "unavailable" | string;
+  source: string;
+  note: string;
+};
+
+export type JournalAnalyticsRange = {
+  fromDate: string;
+  toDate: string;
+};
+
 export type CreateJournalEntry = {
   symbol: string;
+  setup_id?: string | null;
   trade_type: "long" | "short";
   entry_date: string;
   entry_price: number;
@@ -537,6 +820,7 @@ export type CreateJournalEntry = {
 };
 
 export type UpdateJournalEntry = {
+  setup_id?: string | null;
   exit_date?: string;
   exit_price?: number;
   exit_reason?: string;
@@ -552,6 +836,26 @@ export type UpdateJournalEntry = {
   thesis?: string | null;
   invalidation_rule?: string | null;
   status?: string;
+};
+
+export type JournalIntradayPathInterval = "5minute" | "15minute" | "30minute" | "60minute";
+
+export type CaptureJournalIntradayPathRequest = {
+  broker?: "zerodha";
+  interval?: JournalIntradayPathInterval;
+};
+
+export type CaptureJournalIntradayPathResult = {
+  id: string;
+  journal_id: string;
+  symbol: string;
+  broker: "zerodha" | string;
+  interval: JournalIntradayPathInterval | string;
+  from_at: string;
+  to_at: string;
+  bar_count: number;
+  capture_status: "available" | "partial" | string;
+  captured_at: string;
 };
 
 export type JournalAnalytics = {
@@ -572,6 +876,36 @@ export type JournalAnalytics = {
   longest_dd_days: number;
   recovery_factor: number | null;
   profit_factor: number | null;
+  review_summary?: JournalAnalyticsReviewSummary;
+  analysis_period?: JournalAnalyticsPeriod;
+  r_multiple_summary?: JournalAnalyticsRMultipleSummary;
+  cohort_breakdown?: JournalAnalyticsCohortBreakdown;
+  sector_context?: JournalAnalyticsSectorContext;
+  mae_mfe?: {
+    status: "available" | "unavailable" | string;
+    basis: string;
+    trades_with_path: number;
+    trades_without_path: number;
+    intraday_trades?: number;
+    eod_proxy_trades?: number;
+    avg_mae_pct: number | null;
+    avg_mfe_pct: number | null;
+    avg_mae_r: number | null;
+    avg_mfe_r: number | null;
+    trades: {
+      journal_entry_id: string | null;
+      symbol: string;
+      mae_pct: number;
+      mfe_pct: number;
+      mae_r: number | null;
+      mfe_r: number | null;
+      bars_count: number;
+      basis?: string;
+      interval?: string;
+      source?: string;
+    }[];
+    reason: string;
+  };
 };
 
 export type Fundamentals = {
@@ -737,8 +1071,52 @@ export type ZerodhaReadOnlySmoke = {
   checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
 };
 
+export type BrokerImportResult = {
+  imported: number;
+  skipped: number;
+  unmatched_fills: number;
+  unmatched_symbols: string[];
+  reconciliation_status: "complete" | "needs_review";
+  persisted_unmatched_fills: number;
+  reconciliation_persistence: "available" | "unavailable" | "not_needed";
+  total_filled_orders: number;
+  message: string;
+  last_synced_at?: string | null;
+};
+
+export type BrokerFillReconciliation = {
+  id: string;
+  broker: "zerodha" | "upstox";
+  broker_order_id: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  filled_quantity: number;
+  average_price: number;
+  executed_at: string | null;
+  status: "needs_review" | "linked" | "dismissed";
+  setup_id: string | null;
+  journal_id: string | null;
+  resolution_note: string | null;
+  last_seen_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type BrokerFillReconciliationResponse = {
+  reconciliations: BrokerFillReconciliation[];
+  count: number;
+};
+
+export type BrokerFillReconciliationResolveRequest = {
+  action: "link" | "dismiss";
+  journal_id?: string | null;
+  setup_id?: string | null;
+  resolution_note?: string | null;
+};
+
 export type PlaceOrderRequest = {
   symbol:       string;
+  setup_id?:    string | null;
   side:         "buy" | "sell";
   quantity:     number;
   price:        number;
@@ -761,6 +1139,7 @@ export type OrderResult = {
   status:           string;
   message:          string;
   journal_id:       string | null;
+  setup_id?:        string | null;
   symbol:           string;
   side:             string;
   quantity:         number;
@@ -790,6 +1169,7 @@ export type BrokerOrderReconciliation = {
   requires_reconciliation: boolean;
   rejection_reason: string | null;
   journal_id: string | null;
+  setup_id?: string | null;
   journal_status: string | null;
   message: string;
 };
@@ -799,6 +1179,7 @@ export type BrokerOrderActivityItem = {
   broker: "simulated" | "zerodha" | "upstox";
   broker_order_id: string | null;
   journal_id: string | null;
+  setup_id?: string | null;
   symbol: string;
   side: "BUY" | "SELL";
   quantity: number;
@@ -816,6 +1197,25 @@ export type BrokerOrderActivityItem = {
 
 export type BrokerOrderActivityResponse = {
   orders: BrokerOrderActivityItem[];
+  count: number;
+};
+
+export type BrokerAuditEvent = {
+  id: string;
+  event_type: string;
+  outcome: string;
+  actor_type: string;
+  broker: string | null;
+  broker_order_id: string | null;
+  idempotency_key: string | null;
+  setup_id: string | null;
+  journal_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+};
+
+export type BrokerAuditEventResponse = {
+  events: BrokerAuditEvent[];
   count: number;
 };
 
@@ -852,6 +1252,16 @@ export type DataHealth = {
     source_url?: string | null;
     error_message?: string | null;
     warning_message?: string | null;
+    quality?: {
+      status: string | null;
+      source_rows: number | null;
+      accepted_rows: number | null;
+      filtered_series_rows: number | null;
+      missing_required_rows: number | null;
+      invalid_ohlcv_rows: number | null;
+      duplicate_rows: number | null;
+      reasons?: string[];
+    };
   };
   provider?: SourceMetadata;
   fallback_active?: boolean;
@@ -1045,4 +1455,40 @@ export type BrokerHolding = {
   average_price: number;
   current_value: number;
   pnl: number;
+};
+
+export type BrokerPosition = {
+  symbol: string;
+  exchange: string;
+  quantity: number;
+  average_price: number;
+  pnl: number;
+  day_pnl: number;
+};
+
+export type BrokerOrderStatus = "PENDING" | "OPEN" | "PARTIAL" | "COMPLETE" | "CANCELLED" | "REJECTED";
+
+export type BrokerOrderSnapshot = {
+  broker_order_id: string;
+  symbol: string;
+  exchange: "NSE" | "BSE";
+  side: "BUY" | "SELL";
+  order_type: "MARKET" | "LIMIT" | "SL" | "SL_MARKET";
+  product: "CNC" | "MIS" | "NRML";
+  status: BrokerOrderStatus;
+  quantity: number;
+  filled_quantity: number;
+  average_price: number;
+  limit_price: number | null;
+  trigger_price: number | null;
+  placed_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
+};
+
+export type BrokerOrderbookResponse = {
+  broker: "zerodha" | "upstox";
+  orders: BrokerOrderSnapshot[];
+  count: number;
+  fetched_at: string;
 };

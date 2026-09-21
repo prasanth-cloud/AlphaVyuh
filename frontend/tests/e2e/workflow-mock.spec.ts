@@ -124,6 +124,17 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("discipline settings save an active rulebook in mock mode", async ({ page }) => {
+    await page.goto("/settings?tab=rules", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("rulebook-settings")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("rulebook-list")).toContainText("Starter discipline", { timeout: 10_000 });
+    await page.getByLabel("Rulebook name").fill("Breakout discipline");
+    await page.getByLabel("Minimum planned R:R").fill("2.5");
+    await page.getByRole("button", { name: "Save active rulebook" }).click();
+    await expect(page.getByTestId("rulebook-list")).toContainText("Breakout discipline", { timeout: 10_000 });
+    await expect(page.getByTestId("rulebook-list")).toContainText("minimum R:R 2.5");
+  });
+
   test("market data provenance is visible across core workflow surfaces", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -199,6 +210,41 @@ test.describe("Mock workflow smoke", () => {
     expect(history[0].elapsedMs).toEqual(expect.any(Number));
     expect(history[0].label).toMatch(/Trend Template|Custom scan/);
     expect(history[0].results.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("normalized scanner definition builder saves, applies, and edits a definition", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    page.on("pageerror", (error) => errors.push(error.message));
+    const definitionName = `EOD trend ${Date.now()}`;
+    const editedName = `${definitionName} revised`;
+
+    await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("scanner-definition-new").click();
+    await expect(page.getByTestId("scanner-definition-builder")).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel("Definition name").fill(definitionName);
+    await page.getByLabel("Value for filter 1 in group 1").fill("100");
+    await page.getByRole("button", { name: "Save definition", exact: true }).click();
+
+    await expect(page.getByTestId("scanner-definitions-section").getByRole("button", { name: definitionName, exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("scanner-active-filters")).toContainText(/Price/);
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-scanner-definitions-v1") || "[]"));
+    expect(stored).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: definitionName,
+        groups: [expect.objectContaining({ filters: [expect.objectContaining({ kind: "price_min", value: 100 })] })],
+      }),
+    ]));
+
+    await page.getByRole("button", { name: `Edit scanner definition ${definitionName}`, exact: true }).click();
+    await expect(page.getByTestId("scanner-definition-builder")).toBeVisible();
+    await page.getByLabel("Definition name").fill(editedName);
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByTestId("scanner-definitions-section").getByRole("button", { name: editedName, exact: true })).toBeVisible({ timeout: 15_000 });
     expect(errors).toEqual([]);
   });
 
@@ -296,6 +342,21 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
   });
 
+  test("journal analytics exposes date-bounded cohorts and realized R", async ({ page }) => {
+    await page.goto("/journal?tab=analytics", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("journal-analytics-range")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("journal-r-multiple")).toContainText(/Realised R-multiple|Expectancy/i);
+    await expect(page.getByTestId("journal-cohort-breakdowns")).toContainText(/Outcome cohorts|Scanner provenance|Holding period/i);
+    await expect(page.getByTestId("journal-mae-mfe")).toContainText(/MAE|MFE|EOD proxy/i);
+    await expect(page.getByTestId("journal-mae-mfe-trades")).toContainText(/DIXON|PERSISTENT/i);
+
+    await page.getByLabel("Analytics from date").fill("2026-01-01");
+    await page.getByLabel("Analytics to date").fill("2026-12-31");
+    await page.getByRole("button", { name: /^Apply$/i }).click();
+    await expect(page.getByLabel("Analytics from date")).toHaveValue("2026-01-01");
+    await expect(page.getByLabel("Analytics to date")).toHaveValue("2026-12-31");
+  });
+
   test("uploaded trade report can be handed off to journal review without duplicates", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -386,6 +447,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
     await expect(page.getByText("Save one process lesson")).toBeVisible();
     await page.getByPlaceholder(/Wait for volume confirmation/i).fill("Wait for volume confirmation before entering the breakout.");
+    await page.getByLabel("Plan adherence").selectOption("partial");
+    await page.getByLabel("Next process change").fill("Add a volume confirmation check before entry.");
     await page.getByRole("button", { name: "Save review" }).click();
     await expect(page.getByText("Review saved")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Trade lesson")).toBeVisible();
@@ -396,6 +459,11 @@ test.describe("Mock workflow smoke", () => {
       return journal.find((entry: { id: string }) => entry.id === "review-save-1");
     });
     expect(saved.lessons).toBe("Wait for volume confirmation before entering the breakout.");
+    expect(saved.review).toMatchObject({
+      status: "completed",
+      plan_adherence: "partial",
+      follow_up: "Add a volume confirmation check before entry.",
+    });
 
     await page.goto("/journal?review=reviewed", { waitUntil: "domcontentloaded" });
     await expect(page.locator("tbody tr").filter({ hasText: "HDFCBANK" })).toContainText("Reviewed", { timeout: 15_000 });
@@ -477,6 +545,10 @@ test.describe("Mock workflow smoke", () => {
 
     await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for journal capture draft/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/Not evaluated|Run the recorded rulebook/i);
+    await page.getByRole("button", { name: /^Ready$/ }).click();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/passed/i, { timeout: 10_000 });
+    await expect(page.getByText(/RELIANCE marked ready|marked ready/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
 
     await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
@@ -604,6 +676,8 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Invalidation rule").fill("Exit if the breakout base fails on closing basis.");
 
     await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Ready for journal capture draft/i, { timeout: 10_000 });
+    await page.getByRole("button", { name: /^Ready$/ }).click();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/passed/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
     await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
     await expect(page.getByText(/saved as a journal capture draft/i)).toBeVisible({ timeout: 10_000 });

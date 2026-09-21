@@ -2,6 +2,7 @@ import asyncio
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
@@ -62,8 +63,41 @@ class _Query:
     def execute(self):
         if self.table_name == "users":
             return type("Result", (), {"data": {"plan": "pro", "plan_expires_at": None}})()
+        if self.table_name == "broker_fill_reconciliations" and self.insert_payload is not None:
+            row = {
+                "id": f"reconciliation-{len(self.client.reconciliation_records) + 1}",
+                "created_at": "2026-08-21T12:00:00+00:00",
+                "updated_at": "2026-08-21T12:00:00+00:00",
+                **self.insert_payload,
+            }
+            self.client.reconciliation_records.append(row)
+            return type("Result", (), {"data": [row]})()
+        if self.table_name == "broker_fill_reconciliations" and self.update_payload is not None:
+            matches = [
+                row for row in self.client.reconciliation_records
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            for row in matches:
+                row.update(self.update_payload)
+                row["updated_at"] = "2026-08-21T12:01:00+00:00"
+            return type("Result", (), {"data": matches})()
+        if self.table_name == "broker_fill_reconciliations":
+            matches = [
+                row for row in self.client.reconciliation_records
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            return type("Result", (), {"data": (matches[0] if matches else None) if self.single else matches})()
         if self.table_name == "stock_universe":
             return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
+        if self.table_name == "setups":
+            return type("Result", (), {"data": {
+                "id": self.filters.get("id", "11111111-1111-4111-8111-111111111111"),
+                "user_id": self.filters.get("user_id", "user-1"),
+                "symbol": "RELIANCE",
+                **self.client.setup_row,
+            }})()
+        if self.table_name == "setup_rule_evaluations":
+            return type("Result", (), {"data": self.client.setup_evaluation})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
             if self.client.journal_insert_conflict:
                 self.client.journal_insert_conflict = False
@@ -86,6 +120,18 @@ class _Query:
             row = {"id": f"broker-order-row-{len(self.client.broker_order_inserts) + 1}", **self.insert_payload}
             self.client.broker_order_inserts.append(row)
             return type("Result", (), {"data": [row]})()
+        if self.table_name == "audit_logs" and self.insert_payload is not None:
+            if self.client.audit_insert_error:
+                raise RuntimeError("audit table unavailable")
+            row = {"id": f"audit-{len(self.client.audit_events) + 1}", **self.insert_payload}
+            self.client.audit_events.append(row)
+            return type("Result", (), {"data": [row]})()
+        if self.table_name == "audit_logs":
+            matches = [
+                row for row in self.client.audit_events
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            return type("Result", (), {"data": (matches[0] if matches else None) if self.single else matches})()
         if self.table_name == "broker_orders" and self.update_payload is not None:
             for row in self.client.broker_order_inserts:
                 if all(row.get(key) == value for key, value in self.filters.items()):
@@ -137,10 +183,70 @@ class _FakeSupabase:
         self.broker_connection_metadata = {}
         self.broker_connection_upserts = []
         self.broker_order_inserts = []
+        self.audit_events = []
+        self.reconciliation_records = []
+        self.audit_insert_error = False
         self.journal_insert_conflict = False
+        self.setup_row = {
+            "status": "ready",
+            "review_status": "passed",
+            "last_reviewed_at": "2026-08-20T12:00:00+00:00",
+        }
+        self.setup_evaluation = {
+            "can_proceed": True,
+            "overall_status": "passed",
+            "override_reason": None,
+            "evaluated_at": "2026-08-20T12:00:00+00:00",
+        }
 
     def table(self, table_name: str):
         return _Query(self, table_name)
+
+
+class _SetupMatchQuery:
+    def __init__(self, client, table_name: str):
+        self.client = client
+        self.table_name = table_name
+        self.selected: list[str] = []
+        self.single = False
+
+    def select(self, *args, **_kwargs):
+        if args and isinstance(args[0], str):
+            self.selected = [column.strip() for column in args[0].split(",") if column.strip()]
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def maybe_single(self):
+        self.single = True
+        return self
+
+    def execute(self):
+        if self.table_name == "workflow_states":
+            workflow = self.client.workflow_state or {}
+            if self.selected:
+                workflow = {key: workflow[key] for key in self.selected if key in workflow}
+            return type("Result", (), {"data": workflow})()
+        if self.table_name == "setups" and self.single:
+            row = self.client.setup_rows[0] if self.client.setup_rows else None
+            return type("Result", (), {"data": row})()
+        return type("Result", (), {"data": self.client.setup_rows})()
+
+
+class _SetupMatchSupabase:
+    def __init__(self, setup_rows, workflow_state=None):
+        self.setup_rows = setup_rows
+        self.workflow_state = workflow_state
+
+    def table(self, table_name: str):
+        return _SetupMatchQuery(self, table_name)
 
 
 def _live_creds():
@@ -173,6 +279,13 @@ def _order(live_confirmed: bool = False):
         source_page="watchlist",
         live_confirmed=live_confirmed,
     )
+
+
+def _live_order():
+    order = _order(live_confirmed=True)
+    order.setup_id = "11111111-1111-4111-8111-111111111111"
+    order.idempotency_key = "22222222-2222-4222-8222-222222222222"
+    return order
 
 
 def _fresh_read_only_smoke(broker: str):
@@ -314,7 +427,7 @@ def test_professional_access_blocks_live_confirmation_before_broker_call(monkeyp
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 403
     assert "Live broker order placement is not enabled" in str(exc.value.detail)
@@ -329,7 +442,7 @@ def test_free_plan_blocks_live_broker_order_when_execution_enabled(monkeypatch):
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 403
     assert exc.value.detail["error"] == "plan_required"
@@ -350,6 +463,114 @@ def test_live_order_requires_explicit_confirmation(monkeypatch):
     assert client.journal_inserts == []
 
 
+def test_confirmed_live_order_requires_durable_setup(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "durable setup" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_reviewed_ready_setup(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["review_status"] = "not_evaluated"
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "completed setup review" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_latest_review_permission(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["review_status"] = "warned"
+    client.setup_evaluation["overall_status"] = "warned"
+    client.setup_evaluation["can_proceed"] = False
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "does not allow a live broker order" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_current_review_timestamp(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["last_reviewed_at"] = "2026-08-20T12:01:00+00:00"
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "stale" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_caller_idempotency_key(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    order = _live_order()
+    order.idempotency_key = None
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "idempotency key" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_rejects_missing_credentials_without_simulation(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 503
+    assert "credentials are unavailable" in str(exc.value.detail)
+    assert "No simulated order was created" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_rejects_expired_credentials_without_simulation(monkeypatch):
+    client = _FakeSupabase()
+    expired = _live_creds()
+    expired["expires_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: expired)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 503
+    assert "credentials are unavailable or expired" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
 def test_live_confirmed_order_requires_matching_read_only_smoke(monkeypatch):
     client = _FakeSupabase()
     called = {"adapter": False}
@@ -365,7 +586,7 @@ def test_live_confirmed_order_requires_matching_read_only_smoke(monkeypatch):
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "read-only broker smoke passes" in str(exc.value.detail)
@@ -383,10 +604,36 @@ def test_live_confirmed_order_requires_smoke_for_same_broker(monkeypatch):
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "Live zerodha order placement is blocked" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_fails_closed_when_audit_is_unavailable(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = _fresh_read_only_smoke("zerodha")
+    client.audit_insert_error = True
+    called = {"adapter": False}
+
+    class _Adapter:
+        async def place_order(self, *_args, **_kwargs):
+            called["adapter"] = True
+            raise AssertionError("live adapter must not run without an audit event")
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 503
+    assert "audit logging" in str(exc.value.detail)
+    assert called["adapter"] is False
+    assert client.broker_order_inserts == []
     assert client.journal_inserts == []
 
 
@@ -409,7 +656,7 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _FailingZerodhaAdapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 502
     assert "No simulated order was created" in str(exc.value.detail)
@@ -459,9 +706,9 @@ def test_confirmed_upstox_pending_order_does_not_create_open_journal(monkeypatch
     monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
 
     intent_key = "33333333-3333-4333-8333-333333333333"
-    order = _order(live_confirmed=True)
+    order = _live_order()
     order.idempotency_key = intent_key
-    repeated_order = _order(live_confirmed=True)
+    repeated_order = _live_order()
     repeated_order.idempotency_key = intent_key
     result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
     repeated = asyncio.run(broker_router.place_order(repeated_order, user_id="user-1"))
@@ -483,6 +730,11 @@ def test_confirmed_upstox_pending_order_does_not_create_open_journal(monkeypatch
     assert captured["order"].extensions.upstox.instrument_token == "NSE_EQ|INE002A01018"
     assert client.journal_inserts == []
     assert len(client.broker_order_inserts) == 1
+    assert [event["event_type"] for event in client.audit_events] == [
+        "broker.order.intent.accepted",
+        "broker.order.submitted",
+        "broker.order.deduplicated",
+    ]
     assert client.workflow_upserts[-1]["lifecycle"] == "triggered"
 
 
@@ -522,7 +774,7 @@ def test_confirmed_upstox_partial_fill_records_only_filled_quantity(monkeypatch)
         lambda _user_id, broker="zerodha": {"broker_type": "upstox"} if broker == "zerodha" else _upstox_creds(),
     )
     monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
-    order = _order(live_confirmed=True)
+    order = _live_order()
     order.quantity = 5
 
     result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
@@ -610,6 +862,10 @@ def test_reconcile_pending_order_creates_journal_after_fill(monkeypatch):
     assert client.broker_order_inserts[0]["journal_id"] == "journal-1"
     assert client.broker_order_inserts[0]["status"] == "COMPLETE"
     assert client.workflow_upserts[-1]["lifecycle"] == "open"
+    assert [event["event_type"] for event in client.audit_events] == [
+        "broker.order.reconciliation_requested",
+        "broker.order.reconciled",
+    ]
 
 
 def test_broker_activity_normalizes_lifecycle_without_exposing_draft(monkeypatch):
@@ -669,6 +925,46 @@ def test_broker_activity_normalizes_lifecycle_without_exposing_draft(monkeypatch
     assert complete["journal_state"] == "recorded"
 
 
+def test_broker_audit_events_are_owner_scoped_and_secret_free(monkeypatch):
+    client = _FakeSupabase()
+    client.audit_events.extend([
+        {
+            "id": "audit-1",
+            "user_id": "user-1",
+            "event_type": "broker.order.submitted",
+            "outcome": "submitted",
+            "actor_type": "system",
+            "broker": "upstox",
+            "broker_order_id": "upstox-order-1",
+            "idempotency_key": "intent-1",
+            "setup_id": None,
+            "journal_id": None,
+            "metadata": {"symbol": "RELIANCE", "access_token": "must-not-leak"},
+            "created_at": "2026-06-18T14:00:00+00:00",
+        },
+        {
+            "id": "audit-2",
+            "user_id": "user-2",
+            "event_type": "broker.order.submitted",
+            "outcome": "submitted",
+            "actor_type": "system",
+            "broker": "zerodha",
+            "broker_order_id": "other-order",
+            "metadata": {"symbol": "TCS"},
+        },
+    ])
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    result = asyncio.run(broker_router.broker_audit_events(limit=25, user_id="user-1", user_jwt="jwt"))
+
+    assert result["count"] == 1
+    assert result["events"][0]["id"] == "audit-1"
+    assert result["events"][0]["metadata"] == {"symbol": "RELIANCE", "access_token": "[REDACTED]"}
+    assert "must-not-leak" not in str(result)
+    assert "other-order" not in str(result)
+
+
 def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     client = _FakeSupabase()
     orders = [
@@ -697,6 +993,321 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
 
 
+def test_zerodha_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    orders = [
+        {
+            "status": "COMPLETE",
+            "tradingsymbol": "RELIANCE",
+            "filled_quantity": 10,
+            "average_price": 2525,
+            "transaction_type": "SELL",
+            "order_id": "kite-sell-1",
+            "exchange_timestamp": "2026-05-05 10:20:00",
+        }
+    ]
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: orders)
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["skipped"] == 0
+    assert result["unmatched_fills"] == 1
+    assert result["unmatched_symbols"] == ["RELIANCE"]
+    assert result["reconciliation_status"] == "needs_review"
+    assert result["persisted_unmatched_fills"] == 1
+    assert result["reconciliation_persistence"] == "available"
+    assert result["total_filled_orders"] == 1
+    assert client.journal_inserts == []
+    assert client.reconciliation_records[0]["broker_order_id"] == "kite-sell-1"
+    assert client.reconciliation_records[0]["status"] == "needs_review"
+    assert client.audit_events[-1]["metadata"] == {
+        "imported": 0,
+        "skipped": 0,
+        "unmatched_fills": 1,
+        "unmatched_symbols": ["RELIANCE"],
+        "reconciliation_status": "needs_review",
+        "persisted_unmatched_fills": 1,
+        "reconciliation_persistence": "available",
+        "total_filled_orders": 1,
+    }
+
+
+def test_upstox_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    now = datetime.now(timezone.utc)
+
+    class _Adapter:
+        async def list_orders(self, _creds):
+            return [
+                Order(
+                    id=broker_router.IdempotencyKey("22222222-2222-4222-8222-222222222222"),
+                    broker_order_id=BrokerOrderId("upstox-sell-1"),
+                    symbol="INFY",
+                    exchange="NSE",
+                    side="SELL",
+                    order_type="MARKET",
+                    product="CNC",
+                    status="COMPLETE",
+                    quantity=5,
+                    filled_quantity=5,
+                    average_price=1490,
+                    fills=[],
+                    child_broker_order_ids=[],
+                    placed_at=now,
+                    updated_at=now,
+                )
+            ]
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _upstox_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    result = asyncio.run(broker_router.import_broker_trades("upstox", user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["unmatched_fills"] == 1
+    assert result["unmatched_symbols"] == ["INFY"]
+    assert result["reconciliation_status"] == "needs_review"
+    assert result["persisted_unmatched_fills"] == 1
+    assert result["reconciliation_persistence"] == "available"
+    assert client.journal_inserts == []
+    assert client.reconciliation_records[0]["broker_order_id"] == "upstox-sell-1"
+    assert client.audit_events[-1]["broker"] == "upstox"
+    assert client.audit_events[-1]["metadata"]["unmatched_fills"] == 1
+
+
+def test_zerodha_import_does_not_reopen_resolved_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    client.reconciliation_records.append({
+        "id": "reconciliation-1",
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-resolved-1",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 10,
+        "average_price": 2525,
+        "status": "linked",
+        "journal_id": "journal-1",
+        "setup_id": None,
+    })
+    orders = [{
+        "status": "COMPLETE",
+        "tradingsymbol": "RELIANCE",
+        "filled_quantity": 10,
+        "average_price": 2525,
+        "transaction_type": "SELL",
+        "order_id": "kite-resolved-1",
+        "exchange_timestamp": "2026-05-05 10:20:00",
+    }]
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: orders)
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["skipped"] == 1
+    assert result["unmatched_fills"] == 0
+    assert client.journal_inserts == []
+
+
+def test_broker_reconciliation_can_link_only_matching_owner_journal(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "33333333-3333-4333-8333-333333333333"
+    journal_id = "44444444-4444-4444-8444-444444444444"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "upstox",
+        "broker_order_id": "upstox-reconcile-1",
+        "symbol": "INFY",
+        "side": "SELL",
+        "filled_quantity": 5,
+        "average_price": 1490,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+        "resolution_note": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "INFY",
+        "setup_id": None,
+    })
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    result = asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+        reconciliation_id=UUID(reconciliation_id),
+        body=broker_router.BrokerFillReconciliationResolveRequest(
+            action="link",
+            journal_id=UUID(journal_id),
+        ),
+        user_id="user-1",
+        user_jwt="jwt",
+    ))
+
+    assert result["status"] == "linked"
+    assert result["journal_id"] == journal_id
+    assert client.reconciliation_records[0]["status"] == "linked"
+    assert [event["event_type"] for event in client.audit_events] == [
+        "broker.trade_import.reconciliation_requested",
+        "broker.trade_import.reconciliation_resolved",
+    ]
+    assert client.audit_events[-1]["outcome"] == "reconciled"
+
+
+def test_broker_reconciliation_rejects_cross_symbol_journal(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "55555555-5555-4555-8555-555555555555"
+    journal_id = "66666666-6666-4666-8666-666666666666"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-reconcile-2",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 2,
+        "average_price": 2525,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "TCS",
+        "setup_id": None,
+    })
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+            reconciliation_id=UUID(reconciliation_id),
+            body=broker_router.BrokerFillReconciliationResolveRequest(
+                action="link",
+                journal_id=UUID(journal_id),
+            ),
+            user_id="user-1",
+            user_jwt="jwt",
+        ))
+
+    assert exc_info.value.status_code == 409
+    assert client.reconciliation_records[0]["status"] == "needs_review"
+
+
+def test_broker_reconciliation_fails_closed_when_audit_is_unavailable(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "77777777-7777-4777-8777-777777777777"
+    journal_id = "88888888-8888-4888-8888-888888888888"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-reconcile-3",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 2,
+        "average_price": 2525,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "RELIANCE",
+        "setup_id": None,
+    })
+    client.audit_insert_error = True
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+            reconciliation_id=UUID(reconciliation_id),
+            body=broker_router.BrokerFillReconciliationResolveRequest(
+                action="link",
+                journal_id=UUID(journal_id),
+            ),
+            user_id="user-1",
+            user_jwt="jwt",
+        ))
+
+    assert exc_info.value.status_code == 503
+    assert client.reconciliation_records[0]["status"] == "needs_review"
+
+
+def test_import_matches_one_active_setup_and_preserves_setup_context():
+    client = _SetupMatchSupabase([
+        {
+            "id": "setup-1",
+            "symbol": "RELIANCE",
+            "status": "ready",
+            "strategy_tag": "breakout",
+            "scanner_context": {"preset_name": "Trend Template"},
+            "thesis": "Breakout above the base.",
+            "invalidation_reason": "Close below the base.",
+        },
+        {
+            "id": "setup-closed",
+            "symbol": "RELIANCE",
+            "status": "closed",
+        },
+    ])
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert workflow["setup_id"] == "setup-1"
+    assert workflow["setup_type"] == "breakout"
+    assert enrichment["setup_id"] == "setup-1"
+    assert enrichment["setup_type"] == "breakout"
+    assert enrichment["thesis"] == "Breakout above the base."
+    assert enrichment["invalidation_rule"] == "Close below the base."
+
+
+def test_import_preserves_workflow_thesis_and_invalidation_when_workflow_has_setup():
+    client = _SetupMatchSupabase(
+        [{"id": "setup-1", "symbol": "RELIANCE"}],
+        workflow_state={
+            "source": "watchlist",
+            "setup_id": "setup-1",
+            "setup_type": "breakout",
+            "scanner_context": {"preset_name": "Trend Template"},
+            "thesis": "Hold above the breakout base.",
+            "invalidation_rule": "Close below the base.",
+        },
+    )
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert enrichment["setup_id"] == "setup-1"
+    assert enrichment["thesis"] == "Hold above the breakout base."
+    assert enrichment["invalidation_rule"] == "Close below the base."
+
+
+def test_import_marks_ambiguous_or_missing_setup_as_unplanned():
+    client = _SetupMatchSupabase([
+        {"id": "setup-1", "symbol": "RELIANCE", "status": "ready"},
+        {"id": "setup-2", "symbol": "RELIANCE", "status": "planned"},
+    ])
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert workflow["setup_id"] is None
+    assert enrichment["setup_type"] == "unplanned"
+
+
 def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
     client = _FakeSupabase()
     existing_metadata = _fresh_read_only_smoke("zerodha")
@@ -715,6 +1326,11 @@ def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
 def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(
+        broker_router,
+        "record_broker_audit_event",
+        lambda **kwargs: client.audit_events.append(kwargs),
+    )
     monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
     monkeypatch.setattr(broker_router.kite_api, "get_profile", lambda *_args, **_kwargs: {"user_id": "kite-user"})
@@ -806,7 +1422,7 @@ def test_live_confirmed_order_rejects_stale_read_only_smoke(monkeypatch):
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "read-only broker smoke passes" in str(exc.value.detail)

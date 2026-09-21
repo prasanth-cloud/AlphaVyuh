@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   CHART_TIMEFRAME_OPTIONS,
-  INTRADAY_UNAVAILABLE_MESSAGE,
   candleRangeMonths,
   formatChartCoverageRange,
   formatChartGranularity,

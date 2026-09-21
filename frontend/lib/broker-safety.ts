@@ -1,6 +1,7 @@
 export type BrokerSafetyStatus = {
   connected?: boolean;
   broker?: string | null;
+  plan_allows_broker?: boolean;
   token_expired?: boolean;
   read_only_smoke_required?: boolean;
   read_only_smoke_passed?: boolean;
@@ -8,6 +9,26 @@ export type BrokerSafetyStatus = {
   read_only_smoke_checked_at?: string | null;
   live_order_enabled?: boolean;
 };
+
+export function canRouteLiveBrokerOrder(options: {
+  broker: BrokerSafetyStatus | null | undefined;
+  unavailable?: boolean;
+  setupId?: string | null;
+  lifecycle?: string | null;
+  reviewCanProceed?: boolean;
+}): boolean {
+  return Boolean(
+    !options.unavailable &&
+    options.broker?.live_order_enabled === true &&
+    options.broker.connected === true &&
+    options.broker.broker &&
+    ["zerodha", "upstox"].includes(options.broker.broker.toLowerCase()) &&
+    options.broker.plan_allows_broker !== false &&
+    options.setupId &&
+    options.lifecycle === "ready" &&
+    options.reviewCanProceed === true,
+  );
+}
 
 export type BrokerReadOnlySmokeCheck = {
   ok?: boolean;

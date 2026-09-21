@@ -52,8 +52,8 @@ SUPABASE_KEY = (
 
 if not SUPABASE_URL:
     print("\nERROR: SUPABASE_URL is not set.")
-    print("Fix: Add SUPABASE_URL=https://fyxltykqdvacbdgmeucf.supabase.co to backend/.env")
-    print("Or run: SUPABASE_URL=https://... SUPABASE_SERVICE_KEY=eyJ... python seed_now.py")
+    print("Fix: Set SUPABASE_URL to the reachable AlphaVyuh Supabase project in backend/.env")
+    print("Or run: SUPABASE_URL=https://<project-ref>.supabase.co SUPABASE_SERVICE_KEY=eyJ... python seed_now.py")
     sys.exit(1)
 
 if not SUPABASE_KEY:

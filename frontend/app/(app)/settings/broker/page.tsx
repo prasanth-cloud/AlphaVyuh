@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, LockKeyhole, PlugZap, ShieldCheck, ServerCog } from "lucide-react";
 import {
   getBrokerStatus,
+  getBrokerHoldings,
+  getBrokerPositions,
   getKiteTokenHealth,
   getZerodhaLoginUrl,
   importBrokerTrades,
@@ -14,8 +16,11 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { BrokerActivityTimeline } from "@/components/broker/BrokerActivityTimeline";
+import { BrokerAuditTimeline } from "@/components/broker/BrokerAuditTimeline";
+import { BrokerOrderbookSnapshot } from "@/components/broker/BrokerOrderbookSnapshot";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
+import type { BrokerHolding, BrokerPosition } from "@/lib/api/types";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -67,6 +72,9 @@ function BrokerSettingsContent() {
   const [busy, setBusy] = useState<"connect" | "connect-upstox" | "import" | null>(null);
   const [smokeBusy, setSmokeBusy] = useState(false);
   const [smokeSummary, setSmokeSummary] = useState("");
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const [snapshot, setSnapshot] = useState<{ holdings: BrokerHolding[]; positions: BrokerPosition[]; loadedAt: string } | null>(null);
+  const [snapshotError, setSnapshotError] = useState("");
   const [error, setError] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
@@ -195,6 +203,28 @@ function BrokerSettingsContent() {
     }
   }
 
+  async function handleLoadSnapshot() {
+    if (statusError || !state?.connected) {
+      setSnapshotError("Connect a broker before loading the read-only account snapshot.");
+      return;
+    }
+    setSnapshotBusy(true);
+    setSnapshotError("");
+    const broker = state.broker === "upstox" ? "upstox" : "zerodha";
+    try {
+      const [holdings, positions] = await Promise.all([
+        getBrokerHoldings(broker),
+        getBrokerPositions(broker),
+      ]);
+      setSnapshot({ holdings, positions, loadedAt: new Date().toISOString() });
+    } catch (e: unknown) {
+      setSnapshot(null);
+      setSnapshotError(e instanceof Error ? e.message : "Broker account snapshot is temporarily unavailable.");
+    } finally {
+      setSnapshotBusy(false);
+    }
+  }
+
   const cardStyle: React.CSSProperties = {
     background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
@@ -237,6 +267,7 @@ function BrokerSettingsContent() {
   ];
   const lastSyncedLabel = statusError ? "Unknown" : state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
   const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
+  const activeBroker = state?.broker === "upstox" ? "upstox" : state?.broker === "zerodha" ? "zerodha" : null;
   const importBrokerLabel = statusError ? "broker" : state?.broker === "upstox" ? "Upstox" : "Zerodha";
 
   if (loading) {
@@ -475,6 +506,74 @@ function BrokerSettingsContent() {
               </Num>
             </div>
 
+            <div
+              data-testid="broker-account-snapshot"
+              style={{ marginBottom: 14, padding: "12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Read-only account snapshot</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}>
+                    Load broker-reported NSE/BSE holdings and open positions for reconciliation. This never places or modifies an order.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLoadSnapshot}
+                  disabled={snapshotBusy || Boolean(statusError) || !state?.connected || !state?.plan_allows_broker}
+                  className="shrink-0 px-3 py-2 rounded-[9px] text-[12px] font-semibold disabled:opacity-50"
+                  style={{ background: "var(--surface-1)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
+                >
+                  {snapshotBusy ? "Loading..." : snapshot ? "Refresh snapshot" : "Load snapshot"}
+                </button>
+              </div>
+              {snapshotError && (
+                <div className="text-[12px]" style={{ color: "var(--warn)", lineHeight: 1.5 }}>{snapshotError}</div>
+              )}
+              {!snapshotError && snapshot && (
+                <>
+                  <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 9 }}>
+                    Loaded {new Date(snapshot.loadedAt).toLocaleString()} · {snapshot.positions.length} open position{snapshot.positions.length === 1 ? "" : "s"} · {snapshot.holdings.length} holding{snapshot.holdings.length === 1 ? "" : "s"}
+                  </div>
+                  {snapshot.positions.length === 0 && snapshot.holdings.length === 0 ? (
+                    <div className="text-[12px]" style={{ color: "var(--text-secondary)" }}>The broker returned no NSE/BSE holdings or open positions.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {snapshot.positions.slice(0, 5).map((position) => {
+                        const pnlPositive = position.pnl >= 0;
+                        const dayPnlPositive = position.day_pnl >= 0;
+                        return (
+                          <div key={`${position.exchange}:${position.symbol}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 10px", borderRadius: "var(--radius-sm)", background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
+                            <div>
+                              <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{position.symbol}</div>
+                              <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{position.exchange} · Qty {position.quantity} · Avg ₹{position.average_price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[12px] font-semibold tabular-nums" style={{ color: pnlPositive ? "var(--gain)" : "var(--loss)" }}>{pnlPositive ? "+" : "−"}₹{Math.abs(position.pnl).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                              <div className="text-[10px] tabular-nums" style={{ color: "var(--text-tertiary)" }}>Day {dayPnlPositive ? "+" : "−"}₹{Math.abs(position.day_pnl).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {snapshot.positions.length > 5 && (
+                        <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>Showing 5 of {snapshot.positions.length} positions.</div>
+                      )}
+                      {snapshot.holdings.length > 0 && (
+                        <div className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                          Holdings: {snapshot.holdings.slice(0, 5).map((holding) => `${holding.symbol} (${holding.quantity})`).join(", ")}{snapshot.holdings.length > 5 ? `, +${snapshot.holdings.length - 5} more` : ""}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+              {!snapshotError && !snapshot && (
+                <div className="text-[12px]" style={{ color: "var(--text-tertiary)" }}>
+                  {state?.connected ? "No snapshot loaded yet." : "A connected read-only broker session is required."}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               <button
                 data-testid="connect-btn"
@@ -544,6 +643,13 @@ function BrokerSettingsContent() {
         </div>
 
         <BrokerActivityTimeline />
+
+        <BrokerAuditTimeline />
+
+        <BrokerOrderbookSnapshot
+          broker={activeBroker}
+          enabled={Boolean(!statusError && state?.connected && state?.plan_allows_broker)}
+        />
 
         <div className="broker-adapter-grid" style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           {BROKERS.map((broker) => {

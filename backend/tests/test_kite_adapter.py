@@ -272,6 +272,26 @@ class TestOrderMethods:
         assert orders[0].status == "COMPLETE"
         assert orders[0].average_price == 2500
 
+    def test_list_orders_skips_non_equity_rows(self):
+        equity = {
+            "order_id": "kite-equity-order",
+            "tradingsymbol": "RELIANCE",
+            "exchange": "NSE",
+            "transaction_type": "BUY",
+            "order_type": "MARKET",
+            "product": "CNC",
+            "status": "COMPLETE",
+            "quantity": 1,
+            "filled_quantity": 1,
+            "average_price": 2500,
+            "order_timestamp": "2026-05-05 09:20:00",
+        }
+        derivative = {**equity, "order_id": "kite-derivative-order", "exchange": "NFO", "tradingsymbol": "NIFTY26MAYFUT"}
+        with patch("app.brokers.kite.api.list_orders", return_value=[equity, derivative]):
+            orders = _run(KiteAdapter().list_orders(_creds()))
+
+        assert [order.broker_order_id for order in orders] == ["kite-equity-order"]
+
     def test_subscribe_fills_returns_callable(self):
         unsubscribe = KiteAdapter().subscribe_fills(_creds(), lambda fill: None)
         assert callable(unsubscribe)

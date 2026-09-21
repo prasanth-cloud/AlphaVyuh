@@ -18,7 +18,7 @@ function journalEntry(id: string, entryReason: string): JournalEntry {
     symbol: "RELIANCE",
     company_name: null,
     trade_type: "long",
-    setup_type: "Broker report",
+    setup_type: "unplanned",
     entry_date: "2026-05-01",
     entry_price: 2840,
     quantity: 12,
@@ -68,11 +68,12 @@ describe("trade report journal import", () => {
       entry_date: "2026-05-01",
       entry_price: 2840,
       quantity: 12,
-      setup_type: "Broker report",
+      setup_type: "unplanned",
       source_page: "manual",
       source_context: "Generic broker CSV upload",
     });
     expect(apiMocks.createJournalEntry.mock.calls[0][0].entry_reason).toContain("alphavyuh-report-import:RELIANCE");
+    expect(apiMocks.createJournalEntry.mock.calls[0][0].entry_reason).toContain("UNPLANNED");
     expect(apiMocks.updateJournalEntry.mock.calls[0][1]).toMatchObject({ exit_date: "2026-05-06", exit_price: 2915 });
   });
 

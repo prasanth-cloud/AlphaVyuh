@@ -55,6 +55,13 @@ async function mockBrokerStatus(page: Page, overrides: Record<string, unknown> =
       body: JSON.stringify({ ...baseBrokerStatus, ...overrides }),
     })
   );
+  await page.route("**/api/v1/broker/audit*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ count: 0, events: [] }),
+    })
+  );
 }
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
@@ -205,6 +212,45 @@ test.describe("Broker settings — connected", () => {
     await expect(page.getByText("Zerodha read-only connected")).toBeVisible();
   });
 
+  test("renders the owner-scoped audit trail without exposing secret metadata", async ({ page }) => {
+    await page.route("**/api/v1/broker/audit*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          count: 1,
+          events: [{
+            id: "audit-1",
+            event_type: "broker.order.submitted",
+            outcome: "submitted",
+            actor_type: "system",
+            broker: "zerodha",
+            broker_order_id: "kite-order-1",
+            idempotency_key: "intent-1",
+            setup_id: null,
+            journal_id: null,
+            metadata: {
+              symbol: "RELIANCE",
+              execution_status: "PENDING",
+              quantity: 5,
+              filled_quantity: 0,
+              access_token: "must-not-render",
+            },
+            created_at: "2026-05-30T09:12:00Z",
+          }],
+        }),
+      })
+    );
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const audit = page.getByTestId("broker-audit-timeline");
+    await expect(audit).toContainText("Order submitted");
+    await expect(audit).toContainText("RELIANCE · PENDING · 0/5 filled");
+    await expect(audit).not.toContainText("must-not-render");
+  });
+
   test("shows passed read-only smoke gate while orders stay disabled", async ({ page }) => {
     await page.goto("/settings/broker");
     if (page.url().includes("/login")) return;
@@ -224,6 +270,96 @@ test.describe("Broker settings — connected", () => {
     await expect(evidence).toContainText("Owner review ready");
     await expect(evidence).toContainText("6/6 checks passed");
     await expect(evidence).toContainText("evidence, not approval to place orders");
+  });
+
+  test("loads the owner-scoped read-only holdings and positions snapshot", async ({ page }) => {
+    let holdingsRequests = 0;
+    let positionsRequests = 0;
+    await page.route("**/api/brokers/zerodha/holdings", (route) => {
+      holdingsRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{
+          symbol: "INFY",
+          exchange: "NSE",
+          quantity: 5,
+          average_price: 1500,
+          current_value: 8000,
+          pnl: 500,
+        }]),
+      });
+    });
+    await page.route("**/api/brokers/zerodha/positions", (route) => {
+      positionsRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{
+          symbol: "SBIN",
+          exchange: "NSE",
+          quantity: 2,
+          average_price: 570.95,
+          pnl: 0.45,
+          day_pnl: 0.2,
+        }]),
+      });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const snapshot = page.getByTestId("broker-account-snapshot");
+    await snapshot.getByRole("button", { name: "Load snapshot" }).click();
+    await expect.poll(() => holdingsRequests).toBe(1);
+    await expect.poll(() => positionsRequests).toBe(1);
+    await expect(snapshot).toContainText("SBIN");
+    await expect(snapshot).toContainText("Holdings: INFY (5)");
+    await expect(snapshot).toContainText("1 open position");
+    await expect(snapshot).toContainText("1 holding");
+  });
+
+  test("loads the broker-reported read-only equity orderbook", async ({ page }) => {
+    let orderbookRequests = 0;
+    await page.route("**/api/brokers/zerodha/orders?limit=25", (route) => {
+      orderbookRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          broker: "zerodha",
+          count: 1,
+          fetched_at: "2026-05-30T09:12:00Z",
+          orders: [{
+            broker_order_id: "kite-order-1",
+            symbol: "RELIANCE",
+            exchange: "NSE",
+            side: "BUY",
+            order_type: "LIMIT",
+            product: "CNC",
+            status: "COMPLETE",
+            quantity: 5,
+            filled_quantity: 5,
+            average_price: 2498.5,
+            limit_price: 2500,
+            trigger_price: null,
+            placed_at: "2026-05-30T09:10:00Z",
+            updated_at: "2026-05-30T09:11:00Z",
+            rejection_reason: null,
+          }],
+        }),
+      });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const orderbook = page.getByTestId("broker-orderbook-snapshot");
+    await orderbook.getByRole("button", { name: "Load orderbook" }).click();
+    await expect.poll(() => orderbookRequests).toBe(1);
+    await expect(orderbook).toContainText("RELIANCE");
+    await expect(orderbook).toContainText("5/5 filled");
+    await expect(orderbook).toContainText("Broker-reported orderbook");
   });
 
   test("shows pending lifecycle and reconciles it into Journal", async ({ page }) => {

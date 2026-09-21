@@ -46,12 +46,20 @@ The 10-step user journey in PRODUCT.md depends on fresh data. If data breaks, us
 **SPRINT: Production EOD recovery evidence**
 
 The breadth request is done. The current data issue is not missing raw EOD rows;
-it is production API hosting. `npm run check:data-recovery` currently proves:
+it is the unavailable Supabase dependency behind the production API.
+Current evidence shows:
 
 - Supabase EOD rows are present for the latest available session.
 - Vercel production env points at the Railway recovery API URL.
 - Production mock fallback is disabled.
-- Railway backend hosting still returns fallback `404 Application not found`.
+- Railway `/healthz` is reachable and returns HTTP 200 (backend version 0.3.1).
+- Railway `/api/v1/market/summary` returns HTTP 503.
+- GitHub production signed-in smoke run `32405141720` cannot prepare its QA
+  account because `fyxltykqdvacbdgmeucf.supabase.co` returns `ENOTFOUND`.
+
+Do not substitute an unrelated Supabase project. The next recovery step is to
+reconnect the actual AlphaVyuh project and update matching GitHub/Railway
+configuration; only then should deployment recovery be attempted.
 
 Deliverables:
 

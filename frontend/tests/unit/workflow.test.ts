@@ -160,4 +160,26 @@ describe("workflow local-first persistence", () => {
       target: 820,
     });
   });
+
+  it("does not reuse local workflow state when the live API is unavailable", async () => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    const store = installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Workflow state is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getWorkflowStates, upsertWorkflowState } = await import("@/lib/api");
+
+    await expect(upsertWorkflowState({
+      symbol: "RELIANCE",
+      lifecycle: "watch",
+    })).rejects.toThrow("Workflow state is temporarily unavailable.");
+    expect(store.get("alphavyuh-workflow-state-v1")).toBeUndefined();
+    await expect(getWorkflowStates({ symbols: ["RELIANCE"] })).rejects.toThrow("Workflow state is temporarily unavailable.");
+  });
 });

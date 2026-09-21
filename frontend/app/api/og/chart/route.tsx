@@ -1,6 +1,9 @@
 import { ImageResponse } from "@vercel/og";
 
-export const runtime = "edge";
+// The Edge bundle exceeds the project's 1 MB function limit. @vercel/og
+// supports the Node.js runtime, which keeps this route deployable without
+// changing the generated image contract.
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const p = new URL(req.url).searchParams;
