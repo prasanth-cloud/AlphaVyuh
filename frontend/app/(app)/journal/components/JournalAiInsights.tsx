@@ -178,7 +178,7 @@ export function JournalAiInsights({
                   <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                        {["Setup", "Trades", "Win rate", "Hold", "R:R", "P&L"].map(h => (
+                        {["Setup", "Trades", "Win rate", "Hold", "Planned R:R", "P&L"].map(h => (
                           <th key={h} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 12 }}>{h}</th>
                         ))}
                       </tr>

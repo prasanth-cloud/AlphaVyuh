@@ -1,3 +1,4 @@
+import demoJournalAnalytics from "./demo-journal-analytics.json";
 import type {
   CandleBar,
   CandlesResponse,
@@ -450,48 +451,30 @@ export function mockJournalEntries(): { entries: JournalEntry[]; total: number; 
 }
 
 export function mockJournalStats(): JournalStats {
+  const entries = mockJournalEntries().entries;
+  const closed = entries.filter(entry => entry.status === "closed");
+  const pnl = closed.map(entry => entry.pnl ?? 0);
+  const wins = pnl.filter(value => value > 0);
+  const losses = pnl.filter(value => value < 0);
+  const average = (values: number[]) => values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
   return {
-    total_trades: 24,
-    open_trades: 3,
-    total_pnl: 68420,
-    win_rate: 62.5,
-    avg_pnl: 2850,
-    avg_win: 7200,
-    avg_loss: -3100,
-    best_trade: 18600,
-    worst_trade: -7400,
-    avg_holding_days: 8,
+    total_trades: closed.length,
+    open_trades: entries.filter(entry => entry.status === "open").length,
+    total_pnl: round(pnl.reduce((sum, value) => sum + value, 0)),
+    win_rate: closed.length ? round(wins.length / closed.length * 100) : 0,
+    avg_pnl: average(pnl),
+    avg_win: average(wins),
+    avg_loss: average(losses),
+    best_trade: pnl.length ? Math.max(...pnl) : 0,
+    worst_trade: pnl.length ? Math.min(...pnl) : 0,
+    avg_holding_days: average(closed.map(entry => entry.holding_days ?? 0)),
   };
 }
 
+// Static synthetic example generated from the backend analytics calculation.
+// This example is separate from the editable demo trade list, never real results.
 export function mockJournalAnalytics(): JournalAnalytics {
-  return {
-    equity_curve: [
-      { date: "2026-01", cumulative_pnl: 12000 },
-      { date: "2026-02", cumulative_pnl: 28400 },
-      { date: "2026-03", cumulative_pnl: 43600 },
-      { date: "2026-04", cumulative_pnl: 68420 },
-    ],
-    setup_breakdown: [
-      { setup: "Breakout", trades: 10, wins: 7, win_rate: 70, total_pnl: 38200, avg_pnl: 3820 },
-      { setup: "Pullback", trades: 8, wins: 5, win_rate: 62.5, total_pnl: 24600, avg_pnl: 3075 },
-    ],
-    monthly_pnl: [
-      { month: "Jan", pnl: 12000 },
-      { month: "Feb", pnl: 16400 },
-      { month: "Mar", pnl: 15200 },
-      { month: "Apr", pnl: 24820 },
-    ],
-    drawdown_curve: [
-      { date: "2026-01", drawdown: 0, drawdown_pct: 0 },
-      { date: "2026-02", drawdown: -4200, drawdown_pct: -3.1 },
-      { date: "2026-03", drawdown: -1800, drawdown_pct: -1.2 },
-    ],
-    max_drawdown: -7400,
-    longest_dd_days: 11,
-    recovery_factor: 9.25,
-    profit_factor: 2.4,
-  };
+  return structuredClone(demoJournalAnalytics);
 }
 
 export function mockPriceAlerts(): PriceAlert[] {

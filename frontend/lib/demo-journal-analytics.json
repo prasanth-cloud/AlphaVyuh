@@ -1,0 +1,1350 @@
+{
+  "equity_curve": [
+    {
+      "date": "2026-01-01",
+      "cumulative_pnl": 900.0
+    },
+    {
+      "date": "2026-01-04",
+      "cumulative_pnl": 200.0
+    },
+    {
+      "date": "2026-01-07",
+      "cumulative_pnl": 1800.0
+    },
+    {
+      "date": "2026-01-10",
+      "cumulative_pnl": 2700.0
+    },
+    {
+      "date": "2026-01-13",
+      "cumulative_pnl": 4200.0
+    },
+    {
+      "date": "2026-01-16",
+      "cumulative_pnl": 3500.0
+    },
+    {
+      "date": "2026-01-19",
+      "cumulative_pnl": 3000.0
+    },
+    {
+      "date": "2026-01-22",
+      "cumulative_pnl": 2700.0
+    },
+    {
+      "date": "2026-01-25",
+      "cumulative_pnl": 1900.0
+    },
+    {
+      "date": "2026-01-28",
+      "cumulative_pnl": 1500.0
+    },
+    {
+      "date": "2026-01-31",
+      "cumulative_pnl": 700.0
+    },
+    {
+      "date": "2026-02-03",
+      "cumulative_pnl": 300.0
+    },
+    {
+      "date": "2026-02-06",
+      "cumulative_pnl": 1700.0
+    },
+    {
+      "date": "2026-02-09",
+      "cumulative_pnl": 3000.0
+    },
+    {
+      "date": "2026-02-12",
+      "cumulative_pnl": 3900.0
+    },
+    {
+      "date": "2026-02-15",
+      "cumulative_pnl": 4500.0
+    },
+    {
+      "date": "2026-02-18",
+      "cumulative_pnl": 6000.0
+    },
+    {
+      "date": "2026-02-21",
+      "cumulative_pnl": 7600.0
+    },
+    {
+      "date": "2026-02-24",
+      "cumulative_pnl": 8800.0
+    },
+    {
+      "date": "2026-02-27",
+      "cumulative_pnl": 8400.0
+    },
+    {
+      "date": "2026-03-02",
+      "cumulative_pnl": 7800.0
+    },
+    {
+      "date": "2026-03-05",
+      "cumulative_pnl": 9100.0
+    },
+    {
+      "date": "2026-03-08",
+      "cumulative_pnl": 8600.0
+    },
+    {
+      "date": "2026-03-11",
+      "cumulative_pnl": 9200.0
+    },
+    {
+      "date": "2026-03-14",
+      "cumulative_pnl": 10500.0
+    },
+    {
+      "date": "2026-03-17",
+      "cumulative_pnl": 10000.0
+    },
+    {
+      "date": "2026-03-20",
+      "cumulative_pnl": 9700.0
+    },
+    {
+      "date": "2026-03-23",
+      "cumulative_pnl": 9100.0
+    },
+    {
+      "date": "2026-03-26",
+      "cumulative_pnl": 8800.0
+    },
+    {
+      "date": "2026-03-29",
+      "cumulative_pnl": 9400.0
+    },
+    {
+      "date": "2026-04-01",
+      "cumulative_pnl": 9100.0
+    },
+    {
+      "date": "2026-04-04",
+      "cumulative_pnl": 9800.0
+    },
+    {
+      "date": "2026-04-07",
+      "cumulative_pnl": 9200.0
+    },
+    {
+      "date": "2026-04-10",
+      "cumulative_pnl": 8900.0
+    },
+    {
+      "date": "2026-04-13",
+      "cumulative_pnl": 9600.0
+    },
+    {
+      "date": "2026-04-16",
+      "cumulative_pnl": 9300.0
+    },
+    {
+      "date": "2026-04-19",
+      "cumulative_pnl": 10300.0
+    },
+    {
+      "date": "2026-04-22",
+      "cumulative_pnl": 9700.0
+    },
+    {
+      "date": "2026-04-25",
+      "cumulative_pnl": 9700.0
+    },
+    {
+      "date": "2026-04-28",
+      "cumulative_pnl": 10800.0
+    },
+    {
+      "date": "2026-05-01",
+      "cumulative_pnl": 10300.0
+    },
+    {
+      "date": "2026-05-04",
+      "cumulative_pnl": 9800.0
+    },
+    {
+      "date": "2026-05-07",
+      "cumulative_pnl": 9000.0
+    },
+    {
+      "date": "2026-05-10",
+      "cumulative_pnl": 8300.0
+    },
+    {
+      "date": "2026-05-13",
+      "cumulative_pnl": 8900.0
+    },
+    {
+      "date": "2026-05-16",
+      "cumulative_pnl": 8600.0
+    },
+    {
+      "date": "2026-05-19",
+      "cumulative_pnl": 9600.0
+    },
+    {
+      "date": "2026-05-22",
+      "cumulative_pnl": 9200.0
+    },
+    {
+      "date": "2026-05-25",
+      "cumulative_pnl": 10500.0
+    },
+    {
+      "date": "2026-05-28",
+      "cumulative_pnl": 11600.0
+    },
+    {
+      "date": "2026-05-31",
+      "cumulative_pnl": 10900.0
+    },
+    {
+      "date": "2026-06-03",
+      "cumulative_pnl": 10100.0
+    },
+    {
+      "date": "2026-06-06",
+      "cumulative_pnl": 10900.0
+    },
+    {
+      "date": "2026-06-09",
+      "cumulative_pnl": 11900.0
+    },
+    {
+      "date": "2026-06-12",
+      "cumulative_pnl": 11500.0
+    },
+    {
+      "date": "2026-06-15",
+      "cumulative_pnl": 11100.0
+    },
+    {
+      "date": "2026-06-18",
+      "cumulative_pnl": 10700.0
+    },
+    {
+      "date": "2026-06-21",
+      "cumulative_pnl": 10200.0
+    },
+    {
+      "date": "2026-06-24",
+      "cumulative_pnl": 11800.0
+    },
+    {
+      "date": "2026-06-27",
+      "cumulative_pnl": 13400.0
+    },
+    {
+      "date": "2026-06-30",
+      "cumulative_pnl": 12700.0
+    },
+    {
+      "date": "2026-07-03",
+      "cumulative_pnl": 13700.0
+    },
+    {
+      "date": "2026-07-06",
+      "cumulative_pnl": 13400.0
+    },
+    {
+      "date": "2026-07-09",
+      "cumulative_pnl": 12800.0
+    },
+    {
+      "date": "2026-07-12",
+      "cumulative_pnl": 13500.0
+    },
+    {
+      "date": "2026-07-15",
+      "cumulative_pnl": 12900.0
+    },
+    {
+      "date": "2026-07-18",
+      "cumulative_pnl": 14100.0
+    },
+    {
+      "date": "2026-07-21",
+      "cumulative_pnl": 15200.0
+    },
+    {
+      "date": "2026-07-24",
+      "cumulative_pnl": 16600.0
+    },
+    {
+      "date": "2026-07-27",
+      "cumulative_pnl": 16300.0
+    },
+    {
+      "date": "2026-07-30",
+      "cumulative_pnl": 15900.0
+    },
+    {
+      "date": "2026-08-02",
+      "cumulative_pnl": 16800.0
+    },
+    {
+      "date": "2026-08-05",
+      "cumulative_pnl": 17900.0
+    },
+    {
+      "date": "2026-08-08",
+      "cumulative_pnl": 19400.0
+    },
+    {
+      "date": "2026-08-11",
+      "cumulative_pnl": 20200.0
+    },
+    {
+      "date": "2026-08-14",
+      "cumulative_pnl": 19600.0
+    },
+    {
+      "date": "2026-08-17",
+      "cumulative_pnl": 18800.0
+    },
+    {
+      "date": "2026-08-20",
+      "cumulative_pnl": 20000.0
+    },
+    {
+      "date": "2026-08-23",
+      "cumulative_pnl": 20800.0
+    },
+    {
+      "date": "2026-08-26",
+      "cumulative_pnl": 22300.0
+    },
+    {
+      "date": "2026-08-29",
+      "cumulative_pnl": 21900.0
+    },
+    {
+      "date": "2026-09-01",
+      "cumulative_pnl": 23300.0
+    },
+    {
+      "date": "2026-09-04",
+      "cumulative_pnl": 24500.0
+    },
+    {
+      "date": "2026-09-07",
+      "cumulative_pnl": 24000.0
+    },
+    {
+      "date": "2026-09-10",
+      "cumulative_pnl": 23200.0
+    },
+    {
+      "date": "2026-09-13",
+      "cumulative_pnl": 22400.0
+    },
+    {
+      "date": "2026-09-16",
+      "cumulative_pnl": 21800.0
+    },
+    {
+      "date": "2026-09-19",
+      "cumulative_pnl": 22500.0
+    },
+    {
+      "date": "2026-09-22",
+      "cumulative_pnl": 21800.0
+    },
+    {
+      "date": "2026-09-25",
+      "cumulative_pnl": 23200.0
+    },
+    {
+      "date": "2026-09-28",
+      "cumulative_pnl": 22500.0
+    },
+    {
+      "date": "2026-10-01",
+      "cumulative_pnl": 21700.0
+    },
+    {
+      "date": "2026-10-04",
+      "cumulative_pnl": 22500.0
+    },
+    {
+      "date": "2026-10-07",
+      "cumulative_pnl": 22000.0
+    },
+    {
+      "date": "2026-10-10",
+      "cumulative_pnl": 21300.0
+    }
+  ],
+  "setup_breakdown": [
+    {
+      "setup": "Pullback",
+      "trades": 32,
+      "wins": 15,
+      "win_rate": 46.9,
+      "total_pnl": 7300.0,
+      "avg_pnl": 228.12,
+      "avg_holding_days": 10.7,
+      "avg_risk_reward": null
+    },
+    {
+      "setup": "Breakout",
+      "trades": 32,
+      "wins": 15,
+      "win_rate": 46.9,
+      "total_pnl": 7100.0,
+      "avg_pnl": 221.88,
+      "avg_holding_days": 10.7,
+      "avg_risk_reward": null
+    },
+    {
+      "setup": "Base",
+      "trades": 31,
+      "wins": 14,
+      "win_rate": 45.2,
+      "total_pnl": 6900.0,
+      "avg_pnl": 222.58,
+      "avg_holding_days": 10.5,
+      "avg_risk_reward": null
+    }
+  ],
+  "monthly_pnl": [
+    {
+      "month": "2026-01",
+      "pnl": 700.0
+    },
+    {
+      "month": "2026-02",
+      "pnl": 7700.0
+    },
+    {
+      "month": "2026-03",
+      "pnl": 1000.0
+    },
+    {
+      "month": "2026-04",
+      "pnl": 1400.0
+    },
+    {
+      "month": "2026-05",
+      "pnl": 100.0
+    },
+    {
+      "month": "2026-06",
+      "pnl": 1800.0
+    },
+    {
+      "month": "2026-07",
+      "pnl": 3200.0
+    },
+    {
+      "month": "2026-08",
+      "pnl": 6000.0
+    },
+    {
+      "month": "2026-09",
+      "pnl": 600.0
+    },
+    {
+      "month": "2026-10",
+      "pnl": -1200.0
+    }
+  ],
+  "drawdown_curve": [
+    {
+      "date": "2026-01-01",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-04",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-07",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-10",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-13",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-16",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-19",
+      "drawdown": -1200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-22",
+      "drawdown": -1500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-25",
+      "drawdown": -2300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-28",
+      "drawdown": -2700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-01-31",
+      "drawdown": -3500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-03",
+      "drawdown": -3900.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-06",
+      "drawdown": -2500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-09",
+      "drawdown": -1200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-12",
+      "drawdown": -300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-15",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-18",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-21",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-24",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-02-27",
+      "drawdown": -400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-02",
+      "drawdown": -1000.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-05",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-08",
+      "drawdown": -500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-11",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-14",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-17",
+      "drawdown": -500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-20",
+      "drawdown": -800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-23",
+      "drawdown": -1400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-26",
+      "drawdown": -1700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-03-29",
+      "drawdown": -1100.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-01",
+      "drawdown": -1400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-04",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-07",
+      "drawdown": -1300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-10",
+      "drawdown": -1600.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-13",
+      "drawdown": -900.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-16",
+      "drawdown": -1200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-19",
+      "drawdown": -200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-22",
+      "drawdown": -800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-25",
+      "drawdown": -800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-04-28",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-01",
+      "drawdown": -500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-04",
+      "drawdown": -1000.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-07",
+      "drawdown": -1800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-10",
+      "drawdown": -2500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-13",
+      "drawdown": -1900.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-16",
+      "drawdown": -2200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-19",
+      "drawdown": -1200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-22",
+      "drawdown": -1600.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-25",
+      "drawdown": -300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-28",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-05-31",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-03",
+      "drawdown": -1500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-06",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-09",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-12",
+      "drawdown": -400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-15",
+      "drawdown": -800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-18",
+      "drawdown": -1200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-21",
+      "drawdown": -1700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-24",
+      "drawdown": -100.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-27",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-06-30",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-03",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-06",
+      "drawdown": -300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-09",
+      "drawdown": -900.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-12",
+      "drawdown": -200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-15",
+      "drawdown": -800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-18",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-21",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-24",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-27",
+      "drawdown": -300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-07-30",
+      "drawdown": -700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-02",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-05",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-08",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-11",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-14",
+      "drawdown": -600.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-17",
+      "drawdown": -1400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-20",
+      "drawdown": -200.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-23",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-26",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-08-29",
+      "drawdown": -400.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-01",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-04",
+      "drawdown": -0.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-07",
+      "drawdown": -500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-10",
+      "drawdown": -1300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-13",
+      "drawdown": -2100.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-16",
+      "drawdown": -2700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-19",
+      "drawdown": -2000.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-22",
+      "drawdown": -2700.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-25",
+      "drawdown": -1300.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-09-28",
+      "drawdown": -2000.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-10-01",
+      "drawdown": -2800.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-10-04",
+      "drawdown": -2000.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-10-07",
+      "drawdown": -2500.0,
+      "drawdown_pct": null
+    },
+    {
+      "date": "2026-10-10",
+      "drawdown": -3200.0,
+      "drawdown_pct": null
+    }
+  ],
+  "max_drawdown": 3900.0,
+  "longest_dd_days": 42,
+  "recovery_factor": 5.46,
+  "profit_factor": 1.79,
+  "trading_edge": {
+    "closed_trades": 95,
+    "eligible_trades": 95,
+    "return_trade_count": 95,
+    "cash_trade_count": 95,
+    "wins": 44,
+    "losses": 50,
+    "breakevens": 1,
+    "win_rate_pct": 46.3158,
+    "loss_rate_pct": 52.6316,
+    "avg_gain_pct": 11.0,
+    "avg_loss_pct": 5.42,
+    "largest_gain_pct": 16.0,
+    "largest_loss_pct": 8.0,
+    "avg_win_cash": 1100.0,
+    "avg_loss_cash": 542.0,
+    "expectancy_pct": 2.2421,
+    "expectancy_cash": 224.2105,
+    "profit_factor_cash": 1.786,
+    "payoff_ratio": 2.0295,
+    "adjusted_win_loss_ratio": 1.786,
+    "avg_winner_holding_days": 10.75,
+    "avg_loser_holding_days": 10.6,
+    "winner_holding_count": 44,
+    "loser_holding_count": 50
+  },
+  "monthly_tracker": [
+    {
+      "month": "2026-01",
+      "closed_trades": 11,
+      "eligible_trades": 11,
+      "return_trade_count": 11,
+      "cash_trade_count": 11,
+      "wins": 4,
+      "losses": 7,
+      "breakevens": 0,
+      "win_rate_pct": 36.3636,
+      "loss_rate_pct": 63.6364,
+      "avg_gain_pct": 12.25,
+      "avg_loss_pct": 6.0,
+      "largest_gain_pct": 16.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 1225.0,
+      "avg_loss_cash": 600.0,
+      "expectancy_pct": 0.6364,
+      "expectancy_cash": 63.6364,
+      "profit_factor_cash": 1.1667,
+      "payoff_ratio": 2.0417,
+      "adjusted_win_loss_ratio": 1.1667,
+      "avg_winner_holding_days": 5.25,
+      "avg_loser_holding_days": 9.5714,
+      "winner_holding_count": 4,
+      "loser_holding_count": 7
+    },
+    {
+      "month": "2026-02",
+      "closed_trades": 9,
+      "eligible_trades": 9,
+      "return_trade_count": 9,
+      "cash_trade_count": 9,
+      "wins": 7,
+      "losses": 2,
+      "breakevens": 0,
+      "win_rate_pct": 77.7778,
+      "loss_rate_pct": 22.2222,
+      "avg_gain_pct": 12.1429,
+      "avg_loss_pct": 4.0,
+      "largest_gain_pct": 16.0,
+      "largest_loss_pct": 4.0,
+      "avg_win_cash": 1214.2857,
+      "avg_loss_cash": 400.0,
+      "expectancy_pct": 8.5556,
+      "expectancy_cash": 855.5556,
+      "profit_factor_cash": 10.625,
+      "payoff_ratio": 3.0357,
+      "adjusted_win_loss_ratio": 10.625,
+      "avg_winner_holding_days": 13.1429,
+      "avg_loser_holding_days": 9.5,
+      "winner_holding_count": 7,
+      "loser_holding_count": 2
+    },
+    {
+      "month": "2026-03",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 4,
+      "losses": 6,
+      "breakevens": 0,
+      "win_rate_pct": 40.0,
+      "loss_rate_pct": 60.0,
+      "avg_gain_pct": 9.5,
+      "avg_loss_pct": 4.6667,
+      "largest_gain_pct": 13.0,
+      "largest_loss_pct": 6.0,
+      "avg_win_cash": 950.0,
+      "avg_loss_cash": 466.6667,
+      "expectancy_pct": 1.0,
+      "expectancy_cash": 100.0,
+      "profit_factor_cash": 1.3571,
+      "payoff_ratio": 2.0357,
+      "adjusted_win_loss_ratio": 1.3571,
+      "avg_winner_holding_days": 10.25,
+      "avg_loser_holding_days": 10.6667,
+      "winner_holding_count": 4,
+      "loser_holding_count": 6
+    },
+    {
+      "month": "2026-04",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 4,
+      "losses": 5,
+      "breakevens": 1,
+      "win_rate_pct": 40.0,
+      "loss_rate_pct": 50.0,
+      "avg_gain_pct": 8.75,
+      "avg_loss_pct": 4.2,
+      "largest_gain_pct": 11.0,
+      "largest_loss_pct": 6.0,
+      "avg_win_cash": 875.0,
+      "avg_loss_cash": 420.0,
+      "expectancy_pct": 1.4,
+      "expectancy_cash": 140.0,
+      "profit_factor_cash": 1.6667,
+      "payoff_ratio": 2.0833,
+      "adjusted_win_loss_ratio": 1.6667,
+      "avg_winner_holding_days": 8.25,
+      "avg_loser_holding_days": 12.6,
+      "winner_holding_count": 4,
+      "loser_holding_count": 5
+    },
+    {
+      "month": "2026-05",
+      "closed_trades": 11,
+      "eligible_trades": 11,
+      "return_trade_count": 11,
+      "cash_trade_count": 11,
+      "wins": 4,
+      "losses": 7,
+      "breakevens": 0,
+      "win_rate_pct": 36.3636,
+      "loss_rate_pct": 63.6364,
+      "avg_gain_pct": 10.0,
+      "avg_loss_pct": 5.5714,
+      "largest_gain_pct": 13.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 1000.0,
+      "avg_loss_cash": 557.1429,
+      "expectancy_pct": 0.0909,
+      "expectancy_cash": 9.0909,
+      "profit_factor_cash": 1.0256,
+      "payoff_ratio": 1.7949,
+      "adjusted_win_loss_ratio": 1.0256,
+      "avg_winner_holding_days": 15.75,
+      "avg_loser_holding_days": 13.0,
+      "winner_holding_count": 4,
+      "loser_holding_count": 7
+    },
+    {
+      "month": "2026-06",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 4,
+      "losses": 6,
+      "breakevens": 0,
+      "win_rate_pct": 40.0,
+      "loss_rate_pct": 60.0,
+      "avg_gain_pct": 12.5,
+      "avg_loss_pct": 5.3333,
+      "largest_gain_pct": 16.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 1250.0,
+      "avg_loss_cash": 533.3333,
+      "expectancy_pct": 1.8,
+      "expectancy_cash": 180.0,
+      "profit_factor_cash": 1.5625,
+      "payoff_ratio": 2.3438,
+      "adjusted_win_loss_ratio": 1.5625,
+      "avg_winner_holding_days": 7.5,
+      "avg_loser_holding_days": 7.5,
+      "winner_holding_count": 4,
+      "loser_holding_count": 6
+    },
+    {
+      "month": "2026-07",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 5,
+      "losses": 5,
+      "breakevens": 0,
+      "win_rate_pct": 50.0,
+      "loss_rate_pct": 50.0,
+      "avg_gain_pct": 10.8,
+      "avg_loss_pct": 4.4,
+      "largest_gain_pct": 14.0,
+      "largest_loss_pct": 6.0,
+      "avg_win_cash": 1080.0,
+      "avg_loss_cash": 440.0,
+      "expectancy_pct": 3.2,
+      "expectancy_cash": 320.0,
+      "profit_factor_cash": 2.4545,
+      "payoff_ratio": 2.4545,
+      "adjusted_win_loss_ratio": 2.4545,
+      "avg_winner_holding_days": 13.8,
+      "avg_loser_holding_days": 11.0,
+      "winner_holding_count": 5,
+      "loser_holding_count": 5
+    },
+    {
+      "month": "2026-08",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 7,
+      "losses": 3,
+      "breakevens": 0,
+      "win_rate_pct": 70.0,
+      "loss_rate_pct": 30.0,
+      "avg_gain_pct": 11.1429,
+      "avg_loss_pct": 6.0,
+      "largest_gain_pct": 15.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 1114.2857,
+      "avg_loss_cash": 600.0,
+      "expectancy_pct": 6.0,
+      "expectancy_cash": 600.0,
+      "profit_factor_cash": 4.3333,
+      "payoff_ratio": 1.8571,
+      "adjusted_win_loss_ratio": 4.3333,
+      "avg_winner_holding_days": 9.8571,
+      "avg_loser_holding_days": 12.0,
+      "winner_holding_count": 7,
+      "loser_holding_count": 3
+    },
+    {
+      "month": "2026-09",
+      "closed_trades": 10,
+      "eligible_trades": 10,
+      "return_trade_count": 10,
+      "cash_trade_count": 10,
+      "wins": 4,
+      "losses": 6,
+      "breakevens": 0,
+      "win_rate_pct": 40.0,
+      "loss_rate_pct": 60.0,
+      "avg_gain_pct": 11.75,
+      "avg_loss_pct": 6.8333,
+      "largest_gain_pct": 14.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 1175.0,
+      "avg_loss_cash": 683.3333,
+      "expectancy_pct": 0.6,
+      "expectancy_cash": 60.0,
+      "profit_factor_cash": 1.1463,
+      "payoff_ratio": 1.7195,
+      "adjusted_win_loss_ratio": 1.1463,
+      "avg_winner_holding_days": 11.25,
+      "avg_loser_holding_days": 9.6667,
+      "winner_holding_count": 4,
+      "loser_holding_count": 6
+    },
+    {
+      "month": "2026-10",
+      "closed_trades": 4,
+      "eligible_trades": 4,
+      "return_trade_count": 4,
+      "cash_trade_count": 4,
+      "wins": 1,
+      "losses": 3,
+      "breakevens": 0,
+      "win_rate_pct": 25.0,
+      "loss_rate_pct": 75.0,
+      "avg_gain_pct": 8.0,
+      "avg_loss_pct": 6.6667,
+      "largest_gain_pct": 8.0,
+      "largest_loss_pct": 8.0,
+      "avg_win_cash": 800.0,
+      "avg_loss_cash": 666.6667,
+      "expectancy_pct": -3.0,
+      "expectancy_cash": -300.0,
+      "profit_factor_cash": 0.4,
+      "payoff_ratio": 1.2,
+      "adjusted_win_loss_ratio": 0.4,
+      "avg_winner_holding_days": 10.0,
+      "avg_loser_holding_days": 10.6667,
+      "winner_holding_count": 1,
+      "loser_holding_count": 3
+    }
+  ],
+  "trade_distribution": {
+    "returns_pct": [
+      9.0,
+      -7.0,
+      16.0,
+      9.0,
+      15.0,
+      -7.0,
+      -5.0,
+      -3.0,
+      -8.0,
+      -4.0,
+      -8.0,
+      -4.0,
+      14.0,
+      13.0,
+      9.0,
+      6.0,
+      15.0,
+      16.0,
+      12.0,
+      -4.0,
+      -6.0,
+      13.0,
+      -5.0,
+      6.0,
+      13.0,
+      -5.0,
+      -3.0,
+      -6.0,
+      -3.0,
+      6.0,
+      -3.0,
+      7.0,
+      -6.0,
+      -3.0,
+      7.0,
+      -3.0,
+      10.0,
+      -6.0,
+      0.0,
+      11.0,
+      -5.0,
+      -5.0,
+      -8.0,
+      -7.0,
+      6.0,
+      -3.0,
+      10.0,
+      -4.0,
+      13.0,
+      11.0,
+      -7.0,
+      -8.0,
+      8.0,
+      10.0,
+      -4.0,
+      -4.0,
+      -4.0,
+      -5.0,
+      16.0,
+      16.0,
+      -7.0,
+      10.0,
+      -3.0,
+      -6.0,
+      7.0,
+      -6.0,
+      12.0,
+      11.0,
+      14.0,
+      -3.0,
+      -4.0,
+      9.0,
+      11.0,
+      15.0,
+      8.0,
+      -6.0,
+      -8.0,
+      12.0,
+      8.0,
+      15.0,
+      -4.0,
+      14.0,
+      12.0,
+      -5.0,
+      -8.0,
+      -8.0,
+      -6.0,
+      7.0,
+      -7.0,
+      14.0,
+      -7.0,
+      -8.0,
+      8.0,
+      -5.0,
+      -7.0
+    ],
+    "gain_count": 44,
+    "loss_count": 50,
+    "breakeven_count": 1,
+    "missing_return_count": 0
+  },
+  "metric_coverage": {
+    "closed_trades": 95,
+    "eligible_trades": 95,
+    "return_trade_count": 95,
+    "cash_trade_count": 95,
+    "unknown_exit_date_count": 0,
+    "future_exit_date_count": 0,
+    "missing_return_count": 0,
+    "missing_cash_pnl_count": 0
+  }
+}

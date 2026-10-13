@@ -29,6 +29,10 @@ class _Query:
     def order(self, *args, **kwargs):
         return self
 
+    def range(self, offset, end):
+        self._data = self._data[offset:end + 1]
+        return self
+
     def execute(self):
         if self._fail:
             raise RuntimeError("journal review query down")

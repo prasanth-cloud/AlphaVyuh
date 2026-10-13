@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { JournalAnalytics, JournalTradeMetrics } from "@/lib/api/types";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,17 @@ const STATS = {
   avg_hold_days: 19,
 };
 
-const ANALYTICS = {
+const TRADE_METRICS: JournalTradeMetrics = {
+  closed_trades: 3, eligible_trades: 3, return_trade_count: 3, cash_trade_count: 3,
+  wins: 2, losses: 1, breakevens: 0, win_rate_pct: 66.7, loss_rate_pct: 33.3,
+  avg_gain_pct: 10, avg_loss_pct: 5, largest_gain_pct: 10, largest_loss_pct: 5,
+  avg_win_cash: 1000, avg_loss_cash: 500, expectancy_pct: 5, expectancy_cash: 500,
+  payoff_ratio: 2, adjusted_win_loss_ratio: 4, profit_factor_cash: 4,
+  avg_winner_holding_days: 19, avg_loser_holding_days: 4,
+  winner_holding_count: 2, loser_holding_count: 1,
+};
+
+const ANALYTICS: JournalAnalytics = {
   equity_curve: [
     { date: "2026-02-20", cumulative_pnl: 500 },
     { date: "2026-03-20", cumulative_pnl: 1500 },
@@ -74,6 +85,10 @@ const ANALYTICS = {
   longest_dd_days: 4,
   recovery_factor: 4.29,
   profit_factor: 2.1,
+  trading_edge: TRADE_METRICS,
+  monthly_tracker: [{ ...TRADE_METRICS, month: "2026-03" }],
+  trade_distribution: { returns_pct: [10, 10, -5], gain_count: 2, loss_count: 1, breakeven_count: 0, missing_return_count: 0 },
+  metric_coverage: { closed_trades: 3, eligible_trades: 3, return_trade_count: 3, cash_trade_count: 3, unknown_exit_date_count: 0, future_exit_date_count: 0, missing_return_count: 0, missing_cash_pnl_count: 0 },
 };
 
 const AI_PATTERNS = {
@@ -94,7 +109,7 @@ type TradeFixture = {
   entry_date: string; entry_price: number; quantity: number;
   exit_price: number | null; exit_date: string | null;
   stop_loss: number; target_price: number; setup_type: string;
-  status: string; pnl: number | null; risk_reward: number;
+  status: string; pnl: number | null; pnl_pct?: number | null; risk_reward: number;
   holding_days: number | null; entry_reason: string | null;
   exit_reason: string | null; mistakes: string | null; lessons: string | null;
 };
@@ -116,7 +131,7 @@ async function mockJournalRoutes(
   }: {
     entries?: TradeFixture[];
     stats?: typeof STATS;
-    analytics?: typeof ANALYTICS;
+    analytics?: JournalAnalytics;
     brokerConnected?: boolean;
     journalStatus?: number;
     statsStatus?: number;
@@ -332,6 +347,68 @@ test.describe("Journal — trade table", () => {
   });
 });
 
+test.describe("Journal — realized trade outcomes", () => {
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+  ]) {
+    test(`${viewport.name}: a losing trade does not display its planned ratio as positive R`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await mockJournalRoutes(page, {
+        entries: [{
+          ...CLOSED_TRADE,
+          entry_price: 100,
+          exit_price: 95,
+          quantity: 10,
+          stop_loss: 90,
+          target_price: 130,
+          pnl: -50,
+          pnl_pct: -5,
+          risk_reward: 3,
+        }],
+      });
+      await page.goto("/journal");
+      await expect(page).toHaveURL(/\/journal$/);
+
+      const row = page.locator("table tbody tr").filter({ hasText: "TCS" });
+      await expect(row).toContainText("-₹50");
+      await expect(row).not.toContainText("+3.00R");
+      const outcomeArea = row.locator(viewport.name === "mobile"
+        ? ".journal-mobile-trade-card"
+        : "td.journal-table-mobile-hide");
+      await expect(outcomeArea.getByText("-5.00%", { exact: true })).toBeVisible();
+    });
+
+    test(`${viewport.name}: missing initial risk does not derive R from the current stop`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await mockJournalRoutes(page, {
+        entries: [{
+          ...CLOSED_TRADE,
+          entry_price: 100,
+          exit_price: 95,
+          quantity: 10,
+          stop_loss: 99,
+          target_price: 130,
+          pnl: -50,
+          pnl_pct: null,
+          risk_reward: 3,
+        }],
+      });
+      await page.goto("/journal");
+      await expect(page).toHaveURL(/\/journal$/);
+
+      const row = page.locator("table tbody tr").filter({ hasText: "TCS" });
+      await expect(row).toContainText("-₹50");
+      await expect(row).not.toContainText("+3.00R");
+      await expect(row).not.toContainText("-5.00R");
+      const outcomeArea = row.locator(viewport.name === "mobile"
+        ? ".journal-mobile-trade-card"
+        : "td.journal-table-mobile-hide");
+      await expect(outcomeArea.getByText("R unavailable", { exact: true })).toBeVisible();
+    });
+  }
+});
+
 test.describe("Journal — account data unavailable states", () => {
   test("journal entry failure does not render a false empty journal", async ({ page }) => {
     await mockJournalRoutes(page, { journalStatus: 503 });
@@ -360,7 +437,7 @@ test.describe("Journal — account data unavailable states", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByTestId("journal-analytics-unavailable")).toContainText("Journal analytics are temporarily unavailable", { timeout: 15_000 });
     await expect(page.getByText("Close some trades to see analytics here.")).not.toBeVisible();
   });
@@ -534,7 +611,7 @@ test.describe("Journal — tab navigation", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
   });
 
@@ -575,6 +652,99 @@ test.describe("Journal — tab navigation", () => {
     await page.getByRole("button", { name: "Trade review" }).click();
     await expect(page.getByRole("heading", { name: "Pattern stats" })).toBeVisible();
     await expect(patternsCalled).toBe(true);
+  });
+});
+
+test.describe("Journal — analytics tools", () => {
+  for (const viewport of [
+    { name: "desktop", width: 1280, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+  ]) {
+    test(`${viewport.name}: metrics, tracker, distribution, ratios, and forecast fit the workflow`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      await mockJournalRoutes(page);
+      await page.goto("/journal?tab=analytics");
+      await expect(page).toHaveURL(/\/journal\?tab=analytics$/);
+
+      for (const name of ["Trading edge", "Monthly tracker", "Trade-return distribution", "Summary ratios", "Result-based forecast"]) {
+        await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+      }
+      await expect(page.getByTestId("journal-trading-edge")).toContainText("66.7%");
+      const tracker = page.getByRole("table", { name: "Monthly trading tracker" });
+      await expect(tracker.getByRole("row", { name: /2026-03/ })).toContainText("19.0d");
+      for (const name of ["Avg gain", "Avg loss", "Win rate", "Trades", "Largest gain", "Largest loss", "Held winners", "Held losers"]) {
+        await expect(tracker.getByRole("columnheader", { name, exact: true })).toBeVisible();
+      }
+      await expect(page.getByRole("img", { name: "Return histogram for 3 trades" })).toBeVisible();
+      await expect(page.getByTestId("journal-return-distribution")).toContainText("2 gains · 1 losses");
+      await expect(page.getByTestId("journal-forecast").getByLabel("Portfolio size (₹)", { exact: true })).toHaveValue("");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`analytics-${viewport.name}.png`), fullPage: true });
+    });
+  }
+
+  test("forecast responds to assumptions and keeps reinvestment separate", async ({ page }) => {
+    await mockJournalRoutes(page);
+    await page.goto("/journal?tab=analytics");
+    const forecast = page.getByTestId("journal-forecast");
+    for (const [label, value] of [
+      ["Portfolio size (₹)", "100000"], ["Position allocation (%)", "25"],
+      ["Target portfolio return (%)", "10"], ["Average gain (%)", "12"],
+      ["Average loss (% magnitude)", "6"], ["Winning trades (%)", "50"],
+    ]) await forecast.getByLabel(label, { exact: true }).fill(value);
+
+    await expect(forecast.getByText("Expected cash / trade", { exact: true }).locator("..")).toContainText("+₹750");
+    await expect(forecast.getByText("Trades for expected profit to reach target", { exact: true }).locator("..")).toContainText("14");
+    await expect(forecast.getByText("Expected wins / losses", { exact: true }).locator("..")).toContainText("7.00 / 7.00");
+    await forecast.getByLabel("Winning trades (%)", { exact: true }).fill("20");
+    await expect(forecast.getByText("Trades for expected profit to reach target", { exact: true }).locator("..")).toContainText("Not reachable");
+    await forecast.getByLabel("Portfolio size (₹)", { exact: true }).fill("0");
+    await expect(forecast.getByRole("alert")).toBeVisible();
+
+    await forecast.getByText("Reinvestment and turnover what-if", { exact: true }).click();
+    await forecast.getByLabel("Return per reinvestment (%)", { exact: true }).fill("20");
+    await forecast.getByLabel("Reinvestment count", { exact: true }).fill("4");
+    await expect(forecast.getByText("Compounded return: 107.36%", { exact: true })).toBeVisible();
+  });
+
+  test("missing historical metrics stay unavailable while the calculator remains usable", async ({ page }) => {
+    await mockJournalRoutes(page, { analytics: {
+      ...ANALYTICS, trading_edge: null, monthly_tracker: [], trade_distribution: null, metric_coverage: null,
+    } });
+    await page.goto("/journal?tab=analytics");
+
+    await expect(page.getByTestId("journal-trading-edge")).toContainText("Trade-return metrics are unavailable");
+    await expect(page.getByTestId("journal-return-distribution")).toContainText("Return distribution is unavailable");
+    await expect(page.getByTestId("journal-forecast").getByLabel("Portfolio size (₹)", { exact: true })).toBeVisible();
+  });
+
+  test("journal averages exclude breakevens from the two-outcome forecast and preserve chosen exposure", async ({ page }) => {
+    await mockJournalRoutes(page, { analytics: {
+      ...ANALYTICS,
+      trading_edge: {
+        ...TRADE_METRICS, wins: 1, losses: 1, breakevens: 1,
+        win_rate_pct: 33.3, loss_rate_pct: 33.3, avg_gain_pct: 12, avg_loss_pct: 6,
+        largest_gain_pct: 12, largest_loss_pct: 6, avg_win_cash: 120, avg_loss_cash: 60,
+        expectancy_cash: 20, expectancy_pct: 2, adjusted_win_loss_ratio: 2, profit_factor_cash: 2,
+        winner_holding_count: 1, loser_holding_count: 1,
+      },
+    } });
+    await page.goto("/journal?tab=analytics");
+    const forecast = page.getByTestId("journal-forecast");
+    await forecast.getByLabel("Portfolio size (₹)", { exact: true }).fill("100000");
+    await forecast.getByLabel("Position allocation (%)", { exact: true }).fill("25");
+    await forecast.getByLabel("Target portfolio return (%)", { exact: true }).fill("10");
+    await forecast.getByRole("button", { name: "Use journal averages", exact: true }).click();
+
+    await expect(forecast.getByLabel("Average gain (%)", { exact: true })).toHaveValue("12");
+    await expect(forecast.getByLabel("Average loss (% magnitude)", { exact: true })).toHaveValue("6");
+    await expect(forecast.getByLabel("Winning trades (%)", { exact: true })).toHaveValue("50.00");
+    await expect(forecast.getByLabel("Portfolio size (₹)", { exact: true })).toHaveValue("100000");
+    await expect(forecast.getByLabel("Position allocation (%)", { exact: true })).toHaveValue("25");
+    await expect(forecast.getByLabel("Target portfolio return (%)", { exact: true })).toHaveValue("10");
+    await expect(page.getByTestId("journal-trading-edge")).toContainText("33.3%");
+    await expect(forecast).toContainText("Winning percentage uses decisive trades; breakevens are excluded");
+    await expect(forecast.getByText("Expected cash / trade", { exact: true }).locator("..")).toContainText("+₹750");
   });
 });
 

@@ -28,6 +28,15 @@ export function fmtDate(d: string | null | undefined): string {
   });
 }
 
+export function getTradeOutcomeCaption(entry: Pick<JournalEntry, "status" | "pnl_pct">): string {
+  if (entry.status !== "closed") return entry.status === "open" ? "Open trade" : "Cancelled";
+  if (typeof entry.pnl_pct === "number" && Number.isFinite(entry.pnl_pct)) {
+    return `${entry.pnl_pct >= 0 ? "+" : ""}${entry.pnl_pct.toFixed(2)}%`;
+  }
+  // Planned reward/risk and an editable stop cannot establish realized R.
+  return "R unavailable";
+}
+
 export type TradeFlowMeta = {
   sourceLabel: string;
   brokerLabel: string | null;
