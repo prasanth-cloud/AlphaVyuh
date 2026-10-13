@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "move_before": {
+    "041_schema_provenance_normalise.sql": "037_chart_workspaces.sql",
+    "20260505014955_workflow_state.sql": "039_journal_idea_context.sql"
+  }
+}
