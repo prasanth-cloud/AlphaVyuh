@@ -27,7 +27,7 @@ const PUBLIC_PREFIXES = [
 ];
 
 export function isPublicPath(pathname: string): boolean {
-  if (pathname === "/") return true;
+  if (pathname === "/" || pathname === "/auth/callback" || pathname === "/auth/error") return true;
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 

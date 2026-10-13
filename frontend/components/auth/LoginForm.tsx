@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
+import { AUTH_SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/auth-error-copy";
 import { markAppTiming } from "@/lib/performance";
 import { trackEvent } from "@/lib/analytics";
 import { resolveAppRouteLabel } from "@/lib/workflow-placement";
@@ -70,6 +71,8 @@ export default function LoginForm() {
     if (params.get("error") === "auth_callback_failed") {
       setError("Confirmation link expired or could not be verified. Please sign in, or request a fresh link.");
       setShowResend(true);
+    } else if (params.get("error") === "auth_service_unavailable") {
+      setError(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }
   }, [router]);
 
@@ -78,6 +81,7 @@ export default function LoginForm() {
     markAppTiming("login-submit");
     setError("");
     setNotice("");
+    setShowResend(false);
     setLoading(true);
     const normalizedEmail = normalizeLoginEmail(email);
     try {
@@ -89,6 +93,7 @@ export default function LoginForm() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Login failed");
+        setShowResend(data.code === "email_not_confirmed");
         return;
       }
       writeLastLoginEmail(normalizedEmail);
@@ -135,6 +140,7 @@ export default function LoginForm() {
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => emailRef.current?.focus());
+    setShowResend(false);
   }
 
   const showPasswordRecovery = /password|credentials/i.test(error) && !/temporarily unavailable/i.test(error);

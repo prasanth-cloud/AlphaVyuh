@@ -93,7 +93,7 @@ export default function SignupForm() {
         setError(data.error || "Could not resend confirmation email.");
         return;
       }
-      setNotice("A fresh confirmation link has been sent.");
+      setNotice("If this account is waiting for verification, a fresh link has been sent.");
     } catch {
       setError("Network error — please try again.");
     } finally {
@@ -108,8 +108,8 @@ export default function SignupForm() {
           <div className="auth-kicker">Verification</div>
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
-            We sent a confirmation link to <strong style={{ color: "var(--text-primary)" }}>{form.email}</strong>.
-            Click it to activate your account and continue into your AlphaVyuh account.
+            If this account needs verification, check <strong style={{ color: "var(--text-primary)" }}>{form.email}</strong> for a confirmation link.
+            Open it to activate your account and continue into AlphaVyuh.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -117,7 +117,7 @@ export default function SignupForm() {
             Keep this tab open if you want. After verification, the link signs you in and redirects you to your account automatically.
           </p>
           {notice && <p style={{ marginTop: 12, fontSize: 13, color: "var(--gain)" }}>{notice}</p>}
-          {error && <p style={{ marginTop: 12, fontSize: 13, color: "var(--loss)" }}>{error}</p>}
+          {error && <p role="alert" style={{ marginTop: 12, fontSize: 13, color: "var(--loss)" }}>{error}</p>}
           <Button
             type="button"
             variant="secondary"
@@ -131,7 +131,7 @@ export default function SignupForm() {
           </Button>
           <p style={{ marginTop: 14, fontSize: 13, color: "var(--text-tertiary)" }}>
             Already verified?{" "}
-            <Link href="/login" style={{ color: "var(--accent)" }}>Sign in</Link>
+            <Link href={`/login?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Sign in</Link>
           </p>
         </CardContent>
       </Card>
@@ -152,18 +152,18 @@ export default function SignupForm() {
           <div className="space-y-1">
             <Label htmlFor="full_name">Full name</Label>
             <Input id="full_name" value={form.full_name} onChange={set("full_name")}
-              placeholder="Arjun Sharma" required />
+              placeholder="Arjun Sharma" required maxLength={200} autoComplete="name" />
           </div>
           <div className="space-y-1">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" value={form.email} onChange={set("email")}
-              placeholder="arjun@example.com" required />
+              placeholder="arjun@example.com" required autoComplete="email" autoCapitalize="none" />
           </div>
           <div className="space-y-1">
             <Label htmlFor="password">Password</Label>
             <div className="relative">
               <Input id="password" type={showPass ? "text" : "password"} value={form.password}
-                onChange={set("password")} placeholder="Min 8 characters" required minLength={8} />
+                onChange={set("password")} placeholder="Min 8 characters" required minLength={8} autoComplete="new-password" />
               <button
                 type="button"
                 aria-label={showPass ? "Hide password" : "Show password"}
@@ -178,10 +178,10 @@ export default function SignupForm() {
           <div className="space-y-1">
             <Label htmlFor="confirm">Confirm password</Label>
             <Input id="confirm" type={showPass ? "text" : "password"} value={form.confirm}
-              onChange={set("confirm")} placeholder="Repeat password" required />
+              onChange={set("confirm")} placeholder="Repeat password" required autoComplete="new-password" />
           </div>
 
-          {error && <p style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
+          {error && <p role="alert" style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
 
           <Button type="submit" disabled={loading} variant="primary" size="lg" fullWidth>
             {loading ? "Submitting request…" : "Request access"}
