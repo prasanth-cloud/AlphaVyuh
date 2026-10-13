@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import date, datetime
+from math import isfinite
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 MIN_QUALITY_SAMPLE_ROWS = 500
@@ -13,16 +16,15 @@ UNCHANGED_MOVE_THRESHOLD_PCT = 0.05
 
 def _f(value: Any, default=None):
     try:
-        return float(value) if value is not None else default
-    except (TypeError, ValueError):
+        number = float(value) if value is not None else None
+        return number if number is not None and isfinite(number) else default
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
 def _i(value: Any, default=None):
-    try:
-        return int(float(value)) if value is not None else default
-    except (TypeError, ValueError):
-        return default
+    number = _f(value)
+    return int(number) if number is not None and number.is_integer() else default
 
 
 def _pct_change(row: dict) -> float | None:
@@ -32,7 +34,7 @@ def _pct_change(row: dict) -> float | None:
     if close is None or close <= 0:
         return None
     if prev_close and prev_close > 0:
-        return (close - prev_close) / prev_close * 100
+        return _f((close - prev_close) / prev_close * 100)
     return stored_pct_change
 
 
@@ -45,6 +47,14 @@ def _ohlcv_signature(row: dict) -> tuple | None:
         _i(row.get("volume"), None),
     ]
     if any(value is None for value in values):
+        return None
+    open_price, high, low, close, volume = values
+    if (
+        min(open_price, high, low, close) <= 0
+        or high < max(open_price, close)
+        or low > min(open_price, close)
+        or volume < 0
+    ):
         return None
     return tuple(round(value, 4) if isinstance(value, float) else value for value in values)
 
@@ -142,8 +152,8 @@ def get_latest_complete_trade_date(
     Return the most recent trade_date with enough rows to represent a full market day.
 
     Partial ingests can leave a newer trade_date with only a few hundred rows, which
-    makes breadth metrics and market summaries misleading. When that happens, fall back
-    to the latest sufficiently populated date instead of the raw max(trade_date).
+    makes breadth metrics and market summaries misleading. Only valid OHLCV rows
+    count toward coverage. If no past/current session qualifies, return None.
     """
     active_universe = _active_nse_eq_universe_count(client)
     required_rows = min_rows
@@ -177,9 +187,14 @@ def get_latest_complete_trade_date(
 
     date_symbols: dict[str, set[str]] = {}
     date_rows: dict[str, list[dict]] = {}
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     for row in rows:
         trade_date = row.get("trade_date")
-        if not trade_date:
+        try:
+            parsed_date = date.fromisoformat(trade_date)
+        except (TypeError, ValueError):
+            continue
+        if parsed_date > today or parsed_date.isoformat() != trade_date:
             continue
         universe_row = row.get("stock_universe")
         if universe_row is not None:
@@ -187,16 +202,8 @@ def get_latest_complete_trade_date(
                 continue
             if not universe_row.get("is_active", True):
                 continue
-        if "close" in row:
-            try:
-                close = float(row.get("close") or 0)
-                prev_close = float(row.get("prev_close") or 0)
-            except (TypeError, ValueError):
-                continue
-            if close <= 0:
-                continue
-            if prev_close <= 0 and row.get("pct_change") is None:
-                continue
+        if _ohlcv_signature(row) is None or _pct_change(row) is None:
+            continue
         date_symbols.setdefault(trade_date, set()).add(row.get("symbol") or "")
         date_rows.setdefault(trade_date, []).append(row)
 
@@ -216,16 +223,4 @@ def get_latest_complete_trade_date(
         if not quality["is_suspicious"]:
             return trade_date
 
-    if active_universe and date_counts:
-        trustworthy_counts = {
-            trade_date: count
-            for trade_date, count in date_counts.items()
-            if not analyze_trade_date_quality(date_rows.get(trade_date, []))["is_suspicious"]
-        }
-        if trustworthy_counts:
-            return max(trustworthy_counts, key=trustworthy_counts.get)
-        return None
-    for trade_date in sorted_dates:
-        if not analyze_trade_date_quality(date_rows.get(trade_date, []))["is_suspicious"]:
-            return trade_date
     return None

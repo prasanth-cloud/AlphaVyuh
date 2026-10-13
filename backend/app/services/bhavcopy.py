@@ -102,7 +102,7 @@ def _expected_active_rows(client, series: set[str] = VALID_SERIES) -> int | None
 
 def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> list[tuple]:
     """
-    Fetch last 252 rows for all symbols in a single paginated query,
+    Fetch history through trade_date for all symbols in paginated queries,
     compute indicators in pandas, return list of (symbol, indicators_dict).
     Far faster than one query per symbol.
     """
@@ -119,6 +119,7 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
             chunk = client.table("daily_ohlcv") \
                 .select("symbol, trade_date, open, high, low, close, volume") \
                 .in_("symbol", sym_batch) \
+                .lte("trade_date", trade_date.isoformat()) \
                 .order("trade_date", desc=False) \
                 .range(offset, offset + 999) \
                 .execute()
@@ -139,8 +140,6 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
     hdf.sort_values(["symbol", "trade_date"], inplace=True)
 
     results = []
-    today_str = str(trade_date)
-
     for symbol, grp in hdf.groupby("symbol", sort=False):
         grp = grp.tail(252).reset_index(drop=True)
         n = len(grp)
