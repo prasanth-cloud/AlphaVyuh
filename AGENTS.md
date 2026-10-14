@@ -85,3 +85,63 @@ Every agent-built change must end with a short summary:
 - Why: the trader, launch, security, or engineering reason.
 - Learned: what the agent discovered while doing the work.
 - Improve next: the next technical, product, UX, data, QA, or security improvement suggested by the evidence.
+
+## Cursor Cloud specific instructions
+
+AlphaVyuh is a **monorepo** with three runnable layers: `frontend/` (Next.js), `backend/` (FastAPI), and `supabase/` (Postgres migrations). Root `package.json` orchestrates scripts via **npm** (not Bun).
+
+### System prerequisites (VM image / one-time)
+
+- **Node.js 18+** (nvm on the VM is fine).
+- **Python 3.12+** with **`python3.12-venv`** installed (`apt install python3.12-venv` on Ubuntu if `python3 -m venv` fails).
+- **Docker** is required only for **local Supabase** (`npm run db:start`). Cloud Agent VMs without Docker should use **mock mode** (below) or a remote Supabase project with real keys in env files.
+- **Playwright Chromium** for e2e: `cd frontend && npx playwright install chromium --with-deps` (once per VM).
+
+### Env files (gitignored; copy from examples)
+
+| File | Purpose |
+|---|---|
+| `frontend/.env.local` | `NEXT_PUBLIC_*` vars; use mock mode for UI-only dev |
+| `backend/.env` | FastAPI secrets; fake Supabase URL/key works for `/health` and mock market data |
+
+**Mock-mode frontend** (no Supabase, no bhavcopy seed):
+
+```
+NEXT_PUBLIC_DATA_MODE=mock
+NEXT_PUBLIC_ALLOW_MOCK_FALLBACK=true
+PLAYWRIGHT_MOCK_AUTH=true
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+**Backend minimal** (from `backend/.env.example`): set `MARKET_DATA_PROVIDER=mock`, generate `BROKER_CREDS_KEY` with `openssl rand -hex 32`, and use placeholder Supabase vars for local smoke.
+
+### Starting services (tmux recommended)
+
+```bash
+npm run dev:backend    # FastAPI on :8000 — health: GET /health
+npm run dev:frontend   # Next.js on :3000
+```
+
+Stop any existing `next dev` before Playwright mock e2e — Next.js 16 allows only one dev lock per `frontend/` directory (`npm run test:e2e:mock` starts its own server on :3002).
+
+### Verification commands (from repo root)
+
+| Check | Command |
+|---|---|
+| Lint | `npm run lint` |
+| Types | `npm run typecheck` |
+| Frontend unit | `npm run test` |
+| Mock workflow e2e | `npm run test:e2e:mock` |
+| Backend unit | `cd backend && .venv/bin/pytest tests/` |
+| Backend HTTP smoke | `npm run test:e2e:backend` |
+| Production build | `cd frontend && npm run build` |
+
+### Full stack with real scanner data
+
+Requires Docker + `npm run db:start` + `npm run db:reset`, then `cd backend && python scripts/backfill_bhavcopy.py` (~25 min). Set real Supabase keys from `supabase status` into both env files and `NEXT_PUBLIC_DATA_MODE=live`.
+
+### Known cloud caveats
+
+- One backend pytest (`test_upstox_auth_url_contains_client_redirect_and_state`) may fail with default `backend/.env` redirect URI — unrelated to app runtime.
+- Scanner POST `/api/v1/scanner/run` returns **401** without auth even when backend is healthy.
+- `CLAUDE.md` mentions Bun; the repo’s root scripts use **npm** — follow `package.json`.
