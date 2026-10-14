@@ -95,3 +95,47 @@ def test_historical_indicator_recalculation_cannot_use_future_bars(future_bars):
     assert actual[0][1]["prev_close"] == 358
     assert actual[0][1]["sma_200"] == 259.5
     assert history_with_future.date_bounds == ["2026-05-08"]
+
+
+@pytest.mark.parametrize("sessions", [1, 40, 200, 251])
+def test_short_history_does_not_publish_52_week_levels(sessions):
+    trade_date = date(2026, 10, 14)
+    rows = [
+        _history_row(day, 100 + index)
+        for index, day in enumerate(pd.bdate_range(end=trade_date, periods=sessions))
+    ]
+
+    indicators = _compute_indicators_bulk(_HistoryClient(rows), ["TEST"], trade_date)[0][1]
+
+    for field in ["week_52_high", "week_52_low", "w52h_pct", "w52l_pct", "is_new_52w_high", "is_new_52w_low"]:
+        assert indicators[field] is None
+
+
+def test_complete_history_has_literal_52_week_levels():
+    trade_date = date(2026, 10, 14)
+    rows = [
+        _history_row(day, 100 + index)
+        for index, day in enumerate(pd.bdate_range(end=trade_date, periods=252))
+    ]
+
+    indicators = _compute_indicators_bulk(_HistoryClient(rows), ["TEST"], trade_date)[0][1]
+
+    assert indicators["week_52_high"] == 352.5
+    assert indicators["week_52_low"] == 98.5
+    assert indicators["is_new_52w_high"] is True
+    assert indicators["is_new_52w_low"] is False
+
+
+@pytest.mark.parametrize("field,value", [("high", None), ("low", float("inf"))])
+def test_missing_or_nonfinite_historical_prices_cannot_supply_52_week_factors(field, value):
+    trade_date = date(2026, 10, 14)
+    rows = [
+        _history_row(day, 100 + index)
+        for index, day in enumerate(pd.bdate_range(end=trade_date, periods=252))
+    ]
+    rows[30][field] = value
+
+    indicators = _compute_indicators_bulk(_HistoryClient(rows), ["TEST"], trade_date)[0][1]
+
+    for name in ["week_52_high", "week_52_low", "w52h_pct", "w52l_pct", "is_new_52w_high", "is_new_52w_low"]:
+        assert indicators[name] is None
