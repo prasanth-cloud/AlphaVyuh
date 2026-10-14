@@ -34,7 +34,7 @@ realized R remain unknown without an account baseline/immutable initial risk.
 | --- | --- |
 | Production Next build, including PWA and OG route | Passed; 59 prerendered routes |
 | Separate TypeScript check | Passed |
-| Frontend unit suite | 736 passed across 119 files |
+| Frontend unit suite | 762 passed across 119 files |
 | ESLint | 0 errors; 14 existing warnings |
 | Backend suite | 474 passed; 1 skipped; 16 dependency/deprecation warnings |
 | Journal, OG/auth reliability, layout, workflow, signed-in browser suites | 76 passed |
@@ -96,6 +96,31 @@ The npm audit still reports the unpatched braces advisory: four high root
 findings and thirteen high frontend findings, all transitive paths from the
 same advisory. See [dependency review](dependency-review.md). The existing audit
 gate is preserved and may block CI; findings are not suppressed to obtain green.
+
+### Hosted preview and CI follow-up
+
+The recovery Vercel preview built successfully with the new project's public
+URL/key and live-only data guards. Authenticated Vercel CLI checks returned:
+login page 200, nonexistent-account login 401 with sanitized copy, malformed
+signup 400, and complete 1200×630 chart-share PNG 200. No real account or email
+was created by those checks.
+
+Hosted testing exposed the inherited production-origin fallback in previews.
+A follow-up retains the initiating HTTPS deployment/branch origin only when it
+matches trusted Vercel system metadata. Explicit site configuration and production
+behavior remain authoritative. Spoofed/insecure hosts are rejected. Its focused
+structured review was clean, the full frontend suite passed 762 tests, and lint,
+production build, and TypeScript passed again.
+
+GitHub CI is not green: its existing service-role architecture checker reports
+the same 19 router violations on unchanged `origin/main` and this branch. The
+baseline was reproduced from a separate archive of main, with identical checker
+output. This needs an actual JWT-scoped-client migration; importing an unused
+client or broadening an allowlist would conceal the problem. Migration Drift
+Check fails with Supabase access-token authentication against its old project
+target. Agent regression gate passes lint/typecheck/unit steps, then fails the
+preserved root npm audit on braces. Local browser/backend runs remain separate
+evidence; CI's later steps did not execute after the audit failure.
 
 Production merge/deploy, server credential entry, public SMTP configuration,
 actual signup → email confirmation → login → authenticated API → logout, and

@@ -184,8 +184,14 @@ tables deny direct client access; do not add permissive policies merely to clear
 the notices. See the [advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
 
 Auth's initial Site URL was `http://localhost:3000`, with no redirect allowlist.
-These defaults require deployment-specific configuration before email confirmation
-can be tested. Email signup/confirmation and secure email change are enabled;
+The recovery Site URL was then pinned to the owned Vercel branch preview,
+`https://frontend-git-fix-portfolio-reliability-prasanth-clouds-projects.vercel.app`,
+with callback origin/path pinned in the allowlist, including a narrow `next`
+query pattern. Exact deployment callbacks must be added when testing immutable
+preview URLs. Avoid assigning production `PUBLIC_SITE_URL`, `LIVE_URL`, or
+`NEXT_PUBLIC_SITE_URL` to previews: explicit configuration takes precedence over
+the trusted per-preview-origin handling needed to keep PKCE cookies on one host.
+Email signup/confirmation and secure email change are enabled;
 anonymous sign-ins/manual identity linking are disabled. The hosted password
 minimum was saved as eight to match application validation.
 
