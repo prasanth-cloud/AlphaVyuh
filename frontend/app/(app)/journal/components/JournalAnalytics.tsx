@@ -141,7 +141,7 @@ export function JournalAnalytics({
           {analyticsError} Closed trades are not being counted as empty.
         </div>
       </Card>
-      <JournalForecast />
+      <JournalForecast key="forecast" />
       </div>
     );
   }
@@ -149,7 +149,7 @@ export function JournalAnalytics({
   if (!analytics) return (
     <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
       <Card padding="lg"><p className="caption" role="status">Loading journal analytics…</p></Card>
-      <JournalForecast />
+      <JournalForecast key="forecast" />
     </div>
   );
 
@@ -311,7 +311,7 @@ export function JournalAnalytics({
           )}
         </div>
       </Card>
-      <JournalForecast metrics={analytics.trading_edge} />
+      <JournalForecast key="forecast" metrics={analytics.trading_edge} />
     </div>
   );
 }

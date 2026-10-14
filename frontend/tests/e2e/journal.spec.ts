@@ -656,6 +656,56 @@ test.describe("Journal — tab navigation", () => {
 });
 
 test.describe("Journal — analytics tools", () => {
+  for (const analyticsStatus of [200, 503]) {
+    test(`forecast preserves assumptions when delayed analytics ${analyticsStatus === 200 ? "loads" : "fails"}`, async ({ page }) => {
+      await mockJournalRoutes(page);
+      let releaseAnalytics!: () => void;
+      const analyticsReleased = new Promise<void>((resolve) => { releaseAnalytics = resolve; });
+      await page.route("**/api/v1/journal/analytics", async (route) => {
+        await analyticsReleased;
+        await route.fulfill({
+          status: analyticsStatus,
+          contentType: "application/json",
+          body: JSON.stringify(analyticsStatus === 200
+            ? ANALYTICS
+            : { detail: "Journal analytics are temporarily unavailable. Trade rows may still be current." }),
+        });
+      });
+
+      await page.goto("/journal?tab=analytics");
+      await expect(page.getByText("Loading journal analytics…", { exact: true })).toBeVisible();
+      const forecast = page.getByTestId("journal-forecast");
+      const assumptions = [
+        ["Portfolio size (₹)", "100000"], ["Position allocation (%)", "25"],
+        ["Target portfolio return (%)", "10"], ["Average gain (%)", "12"],
+        ["Average loss (% magnitude)", "6"], ["Winning trades (%)", "50"],
+      ];
+      for (const [label, value] of assumptions) {
+        await forecast.getByLabel(label, { exact: true }).fill(value);
+      }
+      await expect(forecast.getByText("Expected cash / trade", { exact: true }).locator("..")).toContainText("+₹750");
+      await forecast.getByText("Reinvestment and turnover what-if", { exact: true }).click();
+      await forecast.getByLabel("Return per reinvestment (%)", { exact: true }).fill("20");
+      await forecast.getByLabel("Reinvestment count", { exact: true }).fill("4");
+      await expect(forecast.getByText("Compounded return: 107.36%", { exact: true })).toBeVisible();
+
+      releaseAnalytics();
+      if (analyticsStatus === 200) {
+        await expect(page.getByTestId("journal-edge-dashboard")).toBeVisible();
+        await expect(forecast.getByRole("button", { name: "Use journal averages", exact: true })).toBeVisible();
+      } else {
+        await expect(page.getByTestId("journal-analytics-unavailable")).toBeVisible();
+      }
+      for (const [label, value] of assumptions) {
+        await expect(forecast.getByLabel(label, { exact: true })).toHaveValue(value);
+      }
+      await expect(forecast.getByText("Expected cash / trade", { exact: true }).locator("..")).toContainText("+₹750");
+      await expect(forecast.getByLabel("Return per reinvestment (%)", { exact: true })).toHaveValue("20");
+      await expect(forecast.getByLabel("Reinvestment count", { exact: true })).toHaveValue("4");
+      await expect(forecast.getByText("Compounded return: 107.36%", { exact: true })).toBeVisible();
+    });
+  }
+
   for (const viewport of [
     { name: "desktop", width: 1280, height: 900 },
     { name: "mobile", width: 390, height: 844 },
