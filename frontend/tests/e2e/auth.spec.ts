@@ -48,7 +48,7 @@ test.describe("Public pages — no redirect", () => {
   test("/login is accessible", async ({ page }) => {
     await page.goto("/login");
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   });
 
   test("/signup is accessible", async ({ page }) => {
@@ -95,7 +95,7 @@ test.describe("Open-redirect protection", () => {
       // Page should still be /login (not navigated away)
       await expect(page).toHaveURL(/\/login/);
       // The login form should be visible — we haven't been hijacked
-      await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     });
   }
 
@@ -105,7 +105,7 @@ test.describe("Open-redirect protection", () => {
     await expect(page).toHaveURL(/\/login/);
     const url = new URL(page.url());
     expect(url.searchParams.get("next")).toBe("/dashboard");
-    await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   });
 
   const friendlyRedirects = [

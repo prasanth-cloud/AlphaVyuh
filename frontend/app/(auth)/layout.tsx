@@ -12,7 +12,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </p>
           <div className="auth-aside-list">
             {[
-              "Account-managed access",
+              "Create a Free account",
               "EOD market data with source and freshness",
               "Broker import only; execution not enabled yet",
               "Educational workflow tool, not investment advice",

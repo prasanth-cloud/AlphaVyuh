@@ -92,7 +92,8 @@ if command -v npm >/dev/null && [[ -d frontend/node_modules ]]; then
     npm --prefix frontend exec -- playwright test \
     --output="$QA_DIR/browser-auth-artifacts" \
     --config=frontend/playwright.release.config.ts frontend/tests/e2e/auth-integration.spec.ts \
-    frontend/tests/e2e/auth-callback.spec.ts frontend/tests/e2e/release-readiness.spec.ts
+    frontend/tests/e2e/auth-callback.spec.ts frontend/tests/e2e/auth.spec.ts \
+    frontend/tests/e2e/release-readiness.spec.ts
 else
   for gate in frontend-lint frontend-types-build frontend-unit root-audit frontend-audit browser-workflow browser-auth; do
     unavailable "$gate" 'npm or installed frontend dependencies missing'

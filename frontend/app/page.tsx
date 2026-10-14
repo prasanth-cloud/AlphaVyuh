@@ -251,7 +251,7 @@ export default function LandingPage() {
               {theme === "light" ? "Dark" : "Light"}
             </button>
             <Link href="/login" className="lp-btn-ghost">Sign in</Link>
-            <Link href="/signup" className="lp-btn-cta">Get started →</Link>
+            <Link href="/signup" className="lp-btn-cta">Create account →</Link>
           </div>
           <button
             type="button"
@@ -279,7 +279,7 @@ export default function LandingPage() {
                 {theme === "light" ? "Dark" : "Light"}
               </button>
               <Link href="/login" className="lp-btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
-              <Link href="/signup" className="lp-btn-cta" onClick={() => setMenuOpen(false)}>Get started →</Link>
+              <Link href="/signup" className="lp-btn-cta" onClick={() => setMenuOpen(false)}>Create account →</Link>
             </div>
           </div>
         )}
@@ -298,7 +298,7 @@ export default function LandingPage() {
             </h1>
             <p className="lp-sub">Start with market breadth, jump into high-quality EOD scanners, review TradingView-style charts, build a watchlist, then save the decision trail into your journal.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Request access →</Link>
+              <Link href="/signup" className="lp-btn-primary">Create account →</Link>
               <a href="#how" className="lp-btn-secondary">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
                 See workflow
@@ -668,10 +668,10 @@ export default function LandingPage() {
             <div className="lp-pcard lp-fade">
               <span className="lp-plan-tier">Free</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-free">0</span><span className="lp-pper">/mo</span></div>
-              <p className="lp-pdesc">Enough to try everything. No credit card needed.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-free">Get started <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
+              <p className="lp-pdesc">Start with the core workflow. No credit card needed.</p>
+              <Link href="/signup" className="lp-pcta lp-cta-free">Create account <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
               <div className="lp-pfeats">
-                {[["50 scanner results per scan",true],["3 saved presets",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import",false]].map(f=>(
+                {[["50 scanner results per scan",true],["3 saved presets",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal analytics",true],["Broker import",false]].map(f=>(
                   <div key={f[0] as string} className={"lp-pfi"+(f[1]?" lp-pfi-on":"")}>
                     <div className={"lp-pfcheck"+(f[1]?" lp-pfcheck-on":" lp-pfcheck-off")}>{f[1]?"✓":"–"}</div>
                     {f[0]}
@@ -686,7 +686,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
               <Link href="/signup" className="lp-pcta lp-cta-pro">Get started with Pro <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
               <div className="lp-pfeats">
-                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import",true],["Journal review",true],["Priority support",true]].map(f=>(
+                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import",true],["AI journal review",true],["Priority support",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -722,11 +722,11 @@ export default function LandingPage() {
       {/* FINAL CTA */}
       <section style={{padding:"120px 0",textAlign:"center",position:"relative",overflow:"hidden"}}>
         <div style={{position:"relative",zIndex:1}}>
-          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Account access</div>
+          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Start on Free</div>
           <h2 className="lp-sec-title lp-final-title" style={{marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Scan after market close, keep the reason, plan levels, and review what happened.</p>
-          <Link href="/signup" className="lp-btn-cta-big">Get started →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Account access · EOD market data · Broker import only · No investment advice</p>
+          <Link href="/signup" className="lp-btn-cta-big">Create account →</Link>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Create a Free account to start · EOD market data · No investment advice</p>
         </div>
       </section>
 

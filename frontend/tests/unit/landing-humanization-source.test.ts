@@ -37,10 +37,17 @@ describe("landing page humanization", () => {
     expect(landingSource).not.toContain("Larger NSE/BSE watchlists");
   });
 
-  it("uses account-access CTAs without claiming open self-serve signup", () => {
-    expect(landingSource).toContain("Request access");
-    expect(landingSource).toContain("Get started");
+  it("invites visitors to create a Free account without implying paid access", () => {
+    expect(landingSource).toContain("Create account");
+    expect(landingSource).toContain("Create a Free account to start");
+    expect(landingSource).not.toContain("Request access");
     expect(landingSource).not.toContain("Request Pro access");
+  });
+
+  it("distinguishes included journal analytics from paid AI journal review", () => {
+    expect(landingSource).toContain('["Journal analytics",true]');
+    expect(landingSource).toContain('["AI journal review",true]');
+    expect(landingSource).not.toContain('["Journal review",false]');
   });
 
   it("presents terminal workflow and execution boundaries honestly", () => {
