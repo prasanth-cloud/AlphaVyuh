@@ -188,6 +188,45 @@ def test_complete_success_receipt_and_stored_rows_skip_download(monkeypatch):
     assert calls == []
 
 
+def test_complete_session_uses_source_count_and_can_skip_a_repeat(monkeypatch):
+    client = Client(universe=[{"symbol": "ABSENT", "series": "EQ", "is_active": True}])
+    calls = prepare_ingest(monkeypatch, client)
+
+    first = asyncio.run(bhavcopy.download_and_ingest(TRADE_DATE))
+    second = asyncio.run(bhavcopy.download_and_ingest(TRADE_DATE))
+
+    assert first["expected_rows"] == 2
+    assert first["rows_ingested"] == 2
+    assert first["coverage_pct"] == 100
+    assert first["partial_ingest"] is False
+    assert second["status"] == "already_done"
+    assert calls.count(SOURCE_URL) == 1
+
+
+def test_discarded_source_prices_remain_in_expected_count(monkeypatch):
+    client = Client()
+    content = csv_bytes().replace(b"NEW,EQ,50,55,45,52", b"NEW,EQ,50,55,45,invalid")
+    prepare_ingest(monkeypatch, client, content)
+
+    result = asyncio.run(bhavcopy.download_and_ingest(TRADE_DATE))
+
+    assert result["expected_rows"] == 2
+    assert result["rows_ingested"] == 1
+    assert result["coverage_pct"] == 50
+    assert result["status"] == "partial"
+    assert result["partial_ingest"] is True
+
+
+def test_source_without_supported_series_cannot_report_success(monkeypatch):
+    client = Client()
+    prepare_ingest(monkeypatch, client, csv_bytes().replace(b",EQ,", b",ZZ,"))
+
+    with pytest.raises(ValueError, match="supported"):
+        asyncio.run(bhavcopy.download_and_ingest(TRADE_DATE))
+
+    assert client.tables["daily_ohlcv"] == []
+
+
 def load_backfill(monkeypatch):
     import dotenv
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *_args, **_kwargs: None)
@@ -195,6 +234,29 @@ def load_backfill(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_backfill_keeps_discarded_source_rows_in_coverage(monkeypatch):
+    backfill = load_backfill(monkeypatch)
+    client = Client()
+    content = csv_bytes().replace(b"NEW,EQ,50,55,45,52", b"NEW,EQ,50,55,45,invalid")
+    response = SimpleNamespace(content=content, status_code=200, raise_for_status=lambda: None)
+    session = SimpleNamespace(get=lambda *_args, **_kwargs: response)
+    downloaded = backfill._download_csv(TRADE_DATE, session)
+    assert isinstance(downloaded, tuple)
+    assert downloaded[1] == 2
+    monkeypatch.setattr(backfill, "get_admin_client", lambda: client)
+    monkeypatch.setattr(backfill, "_download_csv", lambda *_args: downloaded)
+    monkeypatch.setattr(backfill.requests, "Session", lambda: session)
+    monkeypatch.setattr(backfill.time, "sleep", lambda *_args: None)
+
+    asyncio.run(backfill.backfill(start_date=TRADE_DATE, end_date=TRADE_DATE, update_universe=True, compute_indicators=False))
+
+    receipt = client.tables["bhavcopy_ingestion_log"][0]
+    assert receipt["expected_rows"] == 2
+    assert receipt["rows_ingested"] == 1
+    assert receipt["status"] == "partial"
+    assert receipt["partial_ingest"] is True
 
 
 @pytest.mark.parametrize("update_universe", [False, True])
@@ -207,7 +269,7 @@ def test_backfill_receipt_distinguishes_selected_universe_from_full_csv(monkeypa
         {"symbol": "NEW", "series": "EQ", "open": 50, "high": 55, "low": 45, "close": 52, "volume": 200000},
     ])
     monkeypatch.setattr(backfill, "get_admin_client", lambda: client)
-    monkeypatch.setattr(backfill, "_download_csv", lambda *_args: frame.copy())
+    monkeypatch.setattr(backfill, "_download_csv", lambda *_args: (frame.copy(), 2))
     monkeypatch.setattr(backfill.requests, "Session", lambda: SimpleNamespace(get=lambda *_args, **_kwargs: None))
     monkeypatch.setattr(backfill.time, "sleep", lambda *_args: None)
 
@@ -231,7 +293,7 @@ def test_backfill_cannot_skip_success_receipt_after_candles_were_removed(monkeyp
     frame = pd.DataFrame([{"symbol": "AUBANK", "series": "EQ", "open": 100, "high": 110,
                            "low": 90, "close": 105, "volume": 100000}])
     monkeypatch.setattr(backfill, "get_admin_client", lambda: client)
-    monkeypatch.setattr(backfill, "_download_csv", lambda *_args: frame.copy())
+    monkeypatch.setattr(backfill, "_download_csv", lambda *_args: (frame.copy(), 1))
     monkeypatch.setattr(backfill.requests, "Session", lambda: SimpleNamespace(get=lambda *_args, **_kwargs: None))
     monkeypatch.setattr(backfill.time, "sleep", lambda *_args: None)
 

@@ -70,7 +70,7 @@ def _trading_days(days_back: int, *, start_date: date | None = None, end_date: d
     return result
 
 
-def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame | None:
+def _download_csv(trade_date: date, session: requests.Session) -> tuple[pd.DataFrame, int] | None:
     date_str = trade_date.strftime("%d%m%Y")
     url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
     try:
@@ -92,6 +92,9 @@ def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame |
         df["series"] = df["series"].str.strip().str.upper()
         df = df[df["series"].isin(VALID_SERIES)].copy()
         df["symbol"] = df["symbol"].str.strip().str.upper()
+        expected_rows = int(df["symbol"].nunique())
+        if expected_rows == 0:
+            raise ValueError("Source contains no supported symbols.")
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         df = df.dropna(subset=["open", "high", "low", "close", "volume"])
@@ -104,7 +107,7 @@ def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame |
         else:
             df["turnover"] = pd.to_numeric(df["turnover"], errors="coerce")
         df["trade_date"] = str(trade_date)
-        return df
+        return df, expected_rows
     except Exception as e:
         print(f"  download error {trade_date}: {e}")
         return None
@@ -322,11 +325,12 @@ async def backfill(
                 skipped += 1
                 continue
 
-            df = _download_csv(d, session)
-            if df is None:
+            downloaded = _download_csv(d, session)
+            if downloaded is None:
                 print(f"  skip {d} (no data / holiday)")
                 skipped += 1
                 continue
+            df, expected_rows = downloaded
 
             try:
                 if update_universe:
@@ -337,7 +341,6 @@ async def backfill(
                     print(f"  skip {d} (no rows match active universe)")
                     skipped += 1
                     continue
-                expected_rows = len(df)
                 partial_ingest = n < expected_rows
                 _execute(client.table("bhavcopy_ingestion_log").upsert({
                     "trade_date": str(d), "status": "partial" if partial_ingest else "success", "rows_ingested": n,

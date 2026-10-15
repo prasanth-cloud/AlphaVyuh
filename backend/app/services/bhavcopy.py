@@ -86,20 +86,6 @@ def _upsert_ingest_log(client, payload: dict) -> None:
         ).execute()
 
 
-def _expected_active_rows(client, series: set[str] = VALID_SERIES) -> int | None:
-    try:
-        result = (
-            client.table("stock_universe")
-            .select("symbol", count="exact")
-            .eq("is_active", True)
-            .in_("series", sorted(series))
-            .execute()
-        )
-        return result.count
-    except Exception:
-        return None
-
-
 def _validate_source_trade_date(df: pd.DataFrame, trade_date: date) -> None:
     if "trade_date_col" not in df.columns:
         raise ValueError("Missing source trade date column.")
@@ -355,6 +341,9 @@ async def download_and_ingest(trade_date: date) -> dict:
         df["series"] = df["series"].str.strip().str.upper()
         df = df[df["series"].isin(VALID_SERIES)].copy()
         df["symbol"] = df["symbol"].str.strip().str.upper()
+        expected_rows = int(df["symbol"].nunique())
+        if expected_rows == 0:
+            raise ValueError("Source contains no supported symbols.")
 
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -396,12 +385,11 @@ async def download_and_ingest(trade_date: date) -> dict:
 
         rows_ingested = len(ohlcv_rows)
         logger.info(f"Ingested {rows_ingested} rows for {trade_date}")
-        expected_rows = _expected_active_rows(client)
-        coverage_pct = round((rows_ingested / expected_rows) * 100, 2) if expected_rows else None
-        partial_ingest = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
+        coverage_pct = round((rows_ingested / expected_rows) * 100, 2)
+        partial_ingest = rows_ingested < expected_rows
         warning_parts = []
         if partial_ingest:
-            warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%).")
+            warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} source symbols ({coverage_pct}%).")
 
         # 8 & 9. Compute indicators via bulk fetch (one query, not N queries)
         update_batch = _compute_indicators_bulk(client, df["symbol"].unique().tolist(), trade_date)
