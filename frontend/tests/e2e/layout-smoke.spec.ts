@@ -385,9 +385,10 @@ test.describe("Workflow layout smoke", () => {
 
   test("account access labels and no-execution posture are visible", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Account access/i);
+    await expect(page.getByRole("link", { name: /^Create account/ }).first()).toHaveAttribute("href", "/signup");
+    await expect(page.getByRole("link", { name: /Request access/i })).toHaveCount(0);
     await expect(page.locator("body")).toContainText(/EOD market data/i);
-    await expect(page.locator("body")).toContainText(/Broker import only/i);
+    await expect(page.locator("body")).toContainText(/Order ticket drafts journal only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Billing is enabled|Checkout opens|No production Razorpay payment/i);
     await expect(page.locator("body")).not.toContainText(/Professional Access/i);
