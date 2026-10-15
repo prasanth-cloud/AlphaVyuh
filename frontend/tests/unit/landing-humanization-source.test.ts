@@ -5,8 +5,9 @@ const landingSource = readFileSync("app/page.tsx", "utf8");
 
 describe("landing page humanization", () => {
   it("keeps the public hero calm and product-scoped", () => {
-    expect(landingSource).toContain("A trader cockpit for scanning, planning, and reviewing Indian equities.");
-    expect(landingSource).toContain("Start with market breadth, jump into high-quality EOD scanners");
+    expect(landingSource).toContain("Clarity before");
+    expect(landingSource).toContain("every trade.");
+    expect(landingSource).toContain("Screen stocks, organize your watchlist, and review your performance.");
     expect(landingSource).toContain("Your trading workspace");
     expect(landingSource).not.toContain('aria-label="Product scope"');
     expect(landingSource).not.toContain("EOD market data");
@@ -52,25 +53,20 @@ describe("landing page humanization", () => {
     expect(landingSource).not.toContain('["Journal review",false]');
   });
 
-  it("presents terminal workflow and execution boundaries honestly", () => {
-    expect(landingSource).toContain("lp-terminal-strip");
-    expect(landingSource).toContain("lp-cockpit-panel");
-    expect(landingSource).toContain("lp-command-strip");
-    expect(landingSource).toContain("lp-workstation-grid");
-    expect(landingSource).toContain("lp-mini-chart");
-    expect(landingSource).toContain("Desk queue");
-    expect(landingSource).toContain("cache-first");
-    expect(landingSource).toContain("journal draft");
-    expect(landingSource).toContain("Scanner latency target");
+  it("shows a focused preview without developer metadata or invented activity", () => {
+    expect(landingSource).toContain("Market snapshot");
+    expect(landingSource).toContain("lp-preview-flow");
+    for (const text of ["cache-first", "Scanner latency target", "169 matches", "24 tracked", "6 reviews due", "5Y EOD range"]) {
+      expect(landingSource).not.toContain(text);
+    }
     expect(landingSource).toContain("Order ticket creates a journal capture draft; live execution remains disabled");
     expect(landingSource).not.toContain("live execution enabled");
-    expect(landingSource).not.toContain("place live orders");
   });
 
   it("renders the market tape from live quotes with an honest unavailable state", () => {
     expect(landingSource).toContain("/api/public/market-tape");
     expect(landingSource).toContain("const [tapeQuotes, setTapeQuotes]");
-    expect(landingSource).toContain("const heroRows = tapeState === \"live\" ? topMovers(tapeQuotes, 5) : [];");
+    expect(landingSource).toContain("const heroRows = tapeState === \"live\" ? topMovers(tapeQuotes, 4) : [];");
     expect(landingSource).toContain("scrollingTapeQuotes.map");
     expect(landingSource).toContain("temporarily unavailable");
     expect(landingSource).not.toContain("lp-tape-meta");

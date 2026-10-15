@@ -7,10 +7,13 @@ test.describe("Sign-in and signup recovery", () => {
     }));
     await page.goto("/");
     const hero = page.locator("#lp-hero");
-    await expect(hero.getByRole("link", { name: "Create account →", exact: true })).toHaveAttribute("href", "/signup");
+    await expect(hero.getByRole("status")).toContainText("Market quotes are temporarily unavailable.");
+    await expect(hero.getByText("Unavailable", { exact: true })).toBeVisible();
+    await expect(hero.getByRole("table")).toHaveCount(0);
+    await expect(hero.getByRole("link", { name: "Create account", exact: true })).toHaveAttribute("href", "/signup");
     await expect(page.locator(".lp-nav-right").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", "/login");
     await expect(page.getByRole("link", { name: /Request access/i })).toHaveCount(0);
-    await hero.getByRole("link", { name: "Create account →", exact: true }).click();
+    await hero.getByRole("link", { name: "Create account", exact: true }).click();
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByRole("button", { name: "Create account", exact: true })).toBeVisible();
     await expect(page.getByText("Start on Free with scanning, watchlists, chart planning, and journaling.")).toBeVisible();
@@ -22,6 +25,7 @@ test.describe("Sign-in and signup recovery", () => {
       status: 503, contentType: "application/json", body: '{"error":"Unavailable in this test"}',
     }));
     await page.goto("/");
+    await expect(page.getByRole("region", { name: "Market snapshot", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Open menu", exact: true }).click();
     await page.locator(".lp-nav-mobile").getByRole("link", { name: "Create account →", exact: true }).click();
     await expect(page).toHaveURL(/\/signup$/);
