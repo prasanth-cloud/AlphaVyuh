@@ -291,7 +291,7 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Terminal workflow · EOD market data</div>
+              <div className="lp-live-pill"><div className="lp-pulse"></div>Your trading workspace</div>
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">A trader cockpit for scanning, planning, and reviewing Indian equities.</span>
@@ -303,12 +303,6 @@ export default function LandingPage() {
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
                 See workflow
               </a>
-            </div>
-            <div className="lp-trust-row" aria-label="Product scope">
-              <span>EOD market data</span>
-              <span>NSE/BSE cash equity</span>
-              <span>No trade calls</span>
-              <span>Order ticket drafts journal only</span>
             </div>
             <div className="lp-terminal-strip" aria-label="Terminal workflow status">
               <div><span>Scan</span><strong>precomputed EOD factors</strong></div>
@@ -726,7 +720,7 @@ export default function LandingPage() {
           <h2 className="lp-sec-title lp-final-title" style={{marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Scan after market close, keep the reason, plan levels, and review what happened.</p>
           <Link href="/signup" className="lp-btn-cta-big">Create account →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Create a Free account to start · EOD market data · No investment advice</p>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Create a Free account to start. No credit card required.</p>
         </div>
       </section>
 
@@ -804,8 +798,6 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.32)}
 .lp-btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border:1.5px solid var(--lp-border);border-radius:999px;font-weight:500;font-size:.9375rem;color:var(--lp-text2);text-decoration:none;transition:all .25s}
 .lp-btn-secondary:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
-.lp-trust-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:560px}
-.lp-trust-row span{padding:6px 10px;border:1px solid var(--lp-border);border-radius:999px;background:var(--lp-surface2);color:var(--lp-text2);font-size:var(--lp-type-micro);font-weight:500;line-height:var(--lp-lh-snug)}
 .lp-terminal-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:560px;margin-top:14px}
 .lp-terminal-strip div{min-width:0;padding:9px 10px;border:1px solid var(--lp-border);border-radius:8px;background:rgba(255,255,255,.025)}
 .lp-terminal-strip span{display:block;font-size:.66rem;font-weight:600;text-transform:uppercase;color:var(--lp-muted);line-height:1.25}

@@ -7,10 +7,12 @@ describe("landing page humanization", () => {
   it("keeps the public hero calm and product-scoped", () => {
     expect(landingSource).toContain("A trader cockpit for scanning, planning, and reviewing Indian equities.");
     expect(landingSource).toContain("Start with market breadth, jump into high-quality EOD scanners");
-    expect(landingSource).toContain("Terminal workflow · EOD market data");
-    expect(landingSource).toContain("NSE/BSE cash equity");
-    expect(landingSource).toContain("No trade calls");
-    expect(landingSource).toContain("Order ticket drafts journal only");
+    expect(landingSource).toContain("Your trading workspace");
+    expect(landingSource).not.toContain('aria-label="Product scope"');
+    expect(landingSource).not.toContain("EOD market data");
+    expect(landingSource).not.toContain("NSE/BSE cash equity");
+    expect(landingSource).not.toContain("No trade calls");
+    expect(landingSource).not.toContain("Order ticket drafts journal only");
 
     expect(landingSource).not.toContain("A focused workflow system for Indian equities");
     expect(landingSource).not.toContain("A simpler desk for Indian equities");

@@ -387,8 +387,8 @@ test.describe("Workflow layout smoke", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: /^Create account/ }).first()).toHaveAttribute("href", "/signup");
     await expect(page.getByRole("link", { name: /Request access/i })).toHaveCount(0);
-    await expect(page.locator("body")).toContainText(/EOD market data/i);
-    await expect(page.locator("body")).toContainText(/Order ticket drafts journal only/i);
+    await expect(page.locator("#lp-hero")).toContainText("Your trading workspace");
+    await expect(page.locator('[aria-label="Product scope"]')).toHaveCount(0);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Billing is enabled|Checkout opens|No production Razorpay payment/i);
     await expect(page.locator("body")).not.toContainText(/Professional Access/i);

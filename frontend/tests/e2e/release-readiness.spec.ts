@@ -14,8 +14,12 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page.locator("body")).toContainText(/Start with market breadth, jump into high-quality EOD scanners/i);
     await expect(page.locator("body")).toContainText(/Desk queue/i);
     await expect(page.locator("body")).toContainText(/journal draft/i);
-    await expect(page.locator("body")).toContainText(/NSE\/BSE cash equity/i);
-    await expect(page.getByRole("link", { name: /Get started/i }).first()).toBeVisible();
+    await expect(page.locator("#lp-hero")).toContainText("Your trading workspace");
+    await expect(page.locator('[aria-label="Product scope"]')).toHaveCount(0);
+    for (const label of ["EOD market data", "NSE/BSE cash equity", "No trade calls", "Order ticket drafts journal only"]) {
+      await expect(page.getByText(label, { exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("link", { name: /^Create account/ }).first()).toBeVisible();
   });
 
   test("landing footer links resolve to marketing pages", async ({ page }) => {
