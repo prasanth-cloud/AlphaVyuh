@@ -1,5 +1,118 @@
 """Tests for email digest service — pure logic, no DB or Resend calls."""
+import asyncio
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from app.services import email_digest
 from app.services.email_digest import _detect_triggers, _render_email
+
+
+class DigestQuery:
+    def __init__(self, client, table):
+        self.client = client
+        self.table = table
+        self.target = None
+        self.statuses = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, field, value):
+        assert field == "trade_date"
+        self.target = value
+        return self
+
+    def in_(self, field, values):
+        assert field == "status"
+        self.statuses = values
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    def execute(self):
+        if self.table == "daily_ohlcv":
+            assert self.target == "2026-10-14"
+            return SimpleNamespace(data=[], count=self.client.stored_rows)
+        receipt = self.client.receipt
+        rows = [receipt] if receipt and receipt.get("trade_date") == self.target else []
+        if self.statuses is not None:
+            rows = [row for row in rows if row.get("status") in self.statuses]
+        return SimpleNamespace(data=rows)
+
+
+class DigestClient:
+    def __init__(self, receipt=None, stored_rows=100):
+        self.receipt = receipt
+        self.stored_rows = stored_rows
+        self.tables = []
+
+    def table(self, name):
+        self.tables.append(name)
+        return DigestQuery(self, name)
+
+
+def completed_receipt(**changes):
+    return {
+        "trade_date": "2026-10-14", "status": "success", "rows_ingested": 100,
+        "expected_rows": 100, "partial_ingest": False,
+        "source_url": "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_14102026.csv",
+        **changes,
+    }
+
+
+def test_trading_day_uses_canonical_completed_ingest_and_stored_candles():
+    client = DigestClient(completed_receipt())
+
+    assert email_digest._is_trading_day(client, date(2026, 10, 14)) is True
+    assert client.tables == ["bhavcopy_ingestion_log", "daily_ohlcv"]
+
+
+@pytest.mark.parametrize("receipt,stored_rows", [
+    (None, 100),
+    (completed_receipt(status="pending"), 100),
+    (completed_receipt(status="partial", partial_ingest=True), 100),
+    (completed_receipt(partial_ingest=True), 100),
+    (completed_receipt(rows_ingested=0), 0),
+    (completed_receipt(expected_rows=2000), 100),
+    (completed_receipt(source_url=None), 100),
+    (completed_receipt(), 0),
+])
+def test_digest_rejects_missing_partial_or_unstored_sessions(receipt, stored_rows):
+    assert email_digest._is_trading_day(DigestClient(receipt, stored_rows), date(2026, 10, 14)) is False
+
+
+def test_digest_skips_unconfigured_resend_without_touching_database(monkeypatch):
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setattr(email_digest, "get_admin_client", lambda: pytest.fail("Missing sender credentials must skip before DB access"))
+
+    assert asyncio.run(email_digest.send_daily_digests()) == {"status": "skipped", "reason": "no_resend_key"}
+
+
+def test_digest_session_date_follows_ist_across_utc_midnight_boundary(monkeypatch):
+    class UtcHostDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 14)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            instant = cls(2026, 10, 14, 20, 0, tzinfo=timezone.utc)
+            return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+
+    checked_dates = []
+    monkeypatch.setenv("RESEND_API_KEY", "re_unit_test_not_a_real_key")
+    monkeypatch.setattr(email_digest, "date", UtcHostDate)
+    monkeypatch.setattr(email_digest, "datetime", Clock)
+    monkeypatch.setattr(email_digest, "get_admin_client", lambda: object())
+    monkeypatch.setattr(email_digest, "_is_trading_day", lambda _client, target: checked_dates.append(target) or False)
+    monkeypatch.setattr(email_digest.resend.Emails, "send", lambda *_args: pytest.fail("No completed session must send no email"))
+
+    assert asyncio.run(email_digest.send_daily_digests()) == {"status": "skipped", "reason": "no_complete_eod"}
+    assert checked_dates == [date(2026, 10, 15)]
 
 
 class TestDetectTriggers:
