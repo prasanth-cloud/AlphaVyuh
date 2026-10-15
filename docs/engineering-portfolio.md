@@ -1,8 +1,10 @@
 # AlphaVyuh engineering portfolio
 
-Evidence reviewed: 2026-10-13. This demonstration plan distinguishes current
-evidence from proposed acceptance criteria; it does not establish production
-recovery.
+Evidence updated: 2026-10-15. The public signup entry and restored API are
+deployed; real email confirmation and signed-in production coverage remain
+unverified. See the [release-specific evidence](analytics-recovery-verification.md).
+This demonstration plan distinguishes measured results from proposed acceptance
+criteria.
 
 ## Engineering narrative
 
@@ -12,9 +14,9 @@ closed trade, correct statistics, and process review. Follow
 wedge; scanner work remains limited to fixes and performance unless a new ADR
 establishes the stated revisit conditions.
 
-The employer's visible [Head of Engineering vacancy](https://wellfound.com/jobs/4629917-head-of-engineering)
-emphasizes Python, PostgreSQL/ETL, reliability, review, and prioritization. It
-requires 8+ years of engineering and 2+ years of leadership, managing 3–5 developers.
+The October 13 research snapshot of the employer's [Head of Engineering vacancy](https://wellfound.com/jobs/4629917-head-of-engineering)
+emphasized Python, PostgreSQL/ETL, reliability, review, and prioritization. It
+required 8+ years of engineering and 2+ years of leadership, managing 3–5 developers.
 AlphaVyuh can demonstrate relevant judgment; it does not establish qualifications,
 location eligibility, or endorsement. Recheck availability and eligibility before
 applying.

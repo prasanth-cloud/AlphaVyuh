@@ -170,68 +170,94 @@ Security scan.
 
 ## Auth settings and cutover
 
-### Verified replacement project (2026-10-13)
+### Verified replacement project and cutover (2026-10-15)
 
-The owner created `yodgbbrughcolslrnvqe` in the selected organization. Its status
-is `ACTIVE_HEALTHY`. All 62 canonical migration versions are recorded; all 34
-public application tables enable RLS. Rollback-only ownership/privilege fixtures
-left zero Auth users and zero daily candles. No historical accounts or trades
-were recovered by creating this project.
+The owner created `yodgbbrughcolslrnvqe` in the selected organization. All 62
+canonical migration versions are recorded, including historical stubs, and all
+34 public application tables enable RLS. The last Security Advisor check has
+zero warnings/errors and ten informational `rls_enabled_no_policy` notices for
+intentionally backend-only tables. Do not add permissive policies to clear
+those notices. See the [advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
 
-The final Security Advisor result has zero warnings/errors and ten informational
-`rls_enabled_no_policy` notices for intentionally backend-only tables. Those
-tables deny direct client access; do not add permissive policies merely to clear
-the notices. See the [advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
+The October 15 read-only count check returned zero Auth users, zero profiles,
+zero daily candles, and 45 seeded reference symbols. Creating the replacement
+project did not recover historical users, journal records, or market history.
 
-Auth's initial Site URL was `http://localhost:3000`, with no redirect allowlist.
-The recovery Site URL was then pinned to the owned Vercel branch preview,
-`https://frontend-git-fix-portfolio-reliability-prasanth-clouds-projects.vercel.app`,
-with callback origin/path pinned in the allowlist, including a narrow `next`
-query pattern. Exact deployment callbacks must be added when testing immutable
-preview URLs. Avoid assigning production `PUBLIC_SITE_URL`, `LIVE_URL`, or
-`NEXT_PUBLIC_SITE_URL` to previews: explicit configuration takes precedence over
-the trusted per-preview-origin handling needed to keep PKCE cookies on one host.
-Email signup/confirmation and secure email change are enabled;
-anonymous sign-ins/manual identity linking are disabled. The hosted password
-minimum was saved as eight to match application validation.
+### Saved Auth and deployment configuration
 
-The dashboard's grace-period banner describes enforcement, not a current breach.
-The Usage page showed AlphaVyuh at 27.4 MB against its 500 MB allowance, with all
-displayed organization usage categories within quota for 29 Sep–29 Oct 2026.
-Usage can lag; measure row/index growth and budget capacity before broad EOD
-backfill. An empty healthy database does not establish capacity for multi-year,
-full-universe history.
+- Site URL is `https://www.alphavyuh.com`.
+- Eight callback entries cover the exact www/apex production origins and two
+  reviewed Vercel preview origins, each with a narrow callback query pattern.
+  There is no wildcard preview hostname. Preview origin handling accepts only
+  trusted Vercel metadata; explicit site configuration takes precedence.
+- Email signup, email confirmation, and secure email change are enabled.
+  Anonymous sign-in and manual identity linking are disabled. The password
+  minimum is eight, matching application validation.
+- Vercel Production and the restored Railway service use the replacement project.
+  Only its publishable key is client-visible; the server key remains server-only.
+  The obsolete local HS256 JWT secret was removed from Railway. Backend Supabase
+  2.16.0 supports the project's modern API keys; actual SDK boundary regressions
+  cover both modern and legacy key formats.
+- Railway is on the owner-selected Free plan, with $1/month usage allowance and
+  serverless sleeping. Health and invalid-token rejection pass; this does not
+  establish always-on scheduling or unlimited capacity. Broker orders and
+  production payment checkout remain disabled.
 
-Configure hosted Auth separately; `supabase/config.toml` does not automatically
-configure a newly created hosted project.
+### Public confirmation email: still incomplete
 
-- Set Site URL to the reviewed deployment's exact origin. Production's current
-  canonical origin is `https://www.alphavyuh.com`; a recovery preview should use
-  its explicitly approved preview origin until production cutover.
-- Allow the exact `/auth/callback` URL for the chosen origin. Add the apex
-  production callback only if that origin remains supported. Avoid broad preview
-  wildcards and keep local development redirects separate.
-- Enable email/password signup and email confirmation; use minimum password
-  length 8, double-confirm email changes, one-hour JWT expiry, refresh-token
-  rotation, and the existing confirmation/recovery templates.
-- Keep anonymous sign-ins and manual identity linking disabled.
-- Configure custom SMTP and a verified sender before opening signup beyond the
-  Supabase organization team. Default hosted SMTP only sends to team addresses;
-  creating a healthy database alone does not make confirmation email work.
-- Copy only the new project URL and publishable/anon key to frontend deployment
-  settings. Keep the service/secret key server-only. Coordinate backend anon,
-  service, and JWT configuration with frontend cutover. Never reuse the old
-  project's JWT secret with a new signing-key project; omit local HS256 bypass
-  unless the exact signing configuration was explicitly verified.
-- Existing sessions and user IDs do not automatically transfer. Plan an
-  approved user/data migration or an explicitly communicated account reset;
-  never claim that a new empty project recovered old accounts.
+The owner approved free Resend setup and the three sender DNS records.
+`auth.alphavyuh.com` is now verified by Resend. The send-only key form is scoped
+to that domain. Supabase SMTP's non-secret fields are prepared for
+`smtp.resend.com:465`, username `resend`, and sender
+`AlphaVyuh <noreply@auth.alphavyuh.com>`.
 
-Recheck signup → confirmation → login → authenticated backend access → logout,
-invalid credentials, outage handling, and cross-user access after configuration.
-Then ingest a bounded real EOD universe/history, inspect data-health/coverage,
-check quota headroom, and verify chart/scanner provenance before presenting live
-market capability. Keep broker execution and billing gates unchanged.
+A fresh settings page on October 15 confirmed custom SMTP is still disabled.
+The prepared form is unsaved. The owner must create/save the new sending key,
+enter it as the SMTP password, and submit the settings under the browser tool's
+credential-handling rule. Never put the key in chat, reports, or source control.
+Keep email confirmation enabled. Supabase's default hosted mail service does
+not establish public signup delivery beyond organization addresses.
+
+After saving, verify the persisted configuration and complete the real flow:
+public signup with a user-created password → received confirmation email →
+confirmation in the same browser → sign in → onboarding → owned watchlist and
+journal writes → authenticated analytics → logout. Local controlled-response
+browser tests do not replace this check. No real account or confirmation email
+has been verified in this recovery.
+
+Auth SMTP does not configure the optional backend digest service. That service
+still needs its own sender authorization/configuration; verification of
+`auth.alphavyuh.com` does not verify `digest@alphavyuh.com`.
+
+### Market data and capacity
+
+The earlier Usage page showed 27.4 MB against the 500 MB Free database allowance,
+with displayed organization categories within quota. Usage can lag; measure
+actual row and index growth before broad ingestion. The grace-period banner
+alone is not proof of a current quota breach.
+
+Ingestion now rejects missing/wrong source dates, preserves known company/ISIN
+metadata, and distinguishes partial selected-universe backfills from complete
+source receipts. A completed receipt must be backed by stored rows before a run
+can skip. Fewer than 252 finite daily high/low observations cannot produce
+52-week levels. These fixes do not populate production history by themselves.
+
+One EOD session supplies basic prices/breadth, while Trend Template/VCP, 200-day
+levels, and RS need more history (RS requires 253 sessions). Five-year chart
+coverage is a separate requirement. Use a source with appropriate platform
+display rights, validate a bounded session, measure storage/index growth, then
+plan the history window. A public download URL does not establish redistribution
+rights. Never seed synthetic examples as live market data.
+
+### CI evidence
+
+The drift workflow now targets the replacement project and compares exact
+canonical version strings, including stubs, independently of execution order.
+Missing/duplicate/malformed versions, missing credentials, missing PR evidence,
+and deletion of an existing migration fail closed. Twenty-eight deterministic
+comparator/workflow fixtures pass. GitHub Actions still needs a valid
+`SUPABASE_ACCESS_TOKEN`; connector authentication does not populate that secret.
+The local fixture result is separate from the hosted CI result.
 
 Sources: [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security),
 [automatic role privileges](https://supabase.com/docs/guides/troubleshooting/custom-role-inherits-privileges-that-were-not-explicitly-granted-ddaa1c),

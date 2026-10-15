@@ -1,146 +1,153 @@
-# Analytics and recovery verification — 2026-10-13
+# Analytics, authentication, and recovery verification — 2026-10-15
 
-AlphaVyuh now calculates the supplied trading-review concepts from eligible
-closed journal records. A replacement Supabase schema is initialized. This is
-implementation and recovery evidence, not a declaration that production is live.
+The public website now offers direct Free account creation, and the restored
+Railway API passes health and invalid-token checks. The requested journal
+analytics and forecast are implemented and tested. **Public email confirmation
+and signed-in production access are not yet verified.** This is a recovery
+record, not a claim that every feature is production-ready or bug-free.
 
-## Delivered behavior
+## Implemented product behavior
 
-| Requested concept | Implemented behavior |
+| Area | Behavior |
 | --- | --- |
-| Trading edge / triangle | Average percentage gain, average percentage loss, batting average, expectancy, and contributing sample sizes |
-| Monthly tracker | Exit-month gain/loss averages, winning percentage, trade count, largest gain/loss, and separate winner/loser holding periods |
-| Trading summary | Percentage payoff ratio, probability-adjusted win/loss ratio, cash profit factor, and explicit missing denominators |
-| Distribution | Histogram of actual recorded percentage returns with gain/loss/breakeven/missing counts and accessible counts table |
-| Result-based forecast | Six editable assumptions, fixed position notional, expected cash/percentage return, target profit, whole trade count, and expected win/loss counts |
-| Turnover / reinvestment | Independent compounding calculator; does not silently compound the fixed-notional forecast |
-| Authentication | Safe request parsing, provider-outage classification, confirmation resend, preserved destination/PKCE cookies, and public confirmation callbacks |
+| Trading edge | Percentage average gain/loss, batting average, expectancy, and contributing sample counts |
+| Monthly tracker | Exit-month averages, win percentage, counts, largest gains/losses, separate winner/loser holding periods |
+| Summary and distribution | Percentage payoff ratio, probability-adjusted ratio, cash profit factor, actual-return histogram and accessible counts table |
+| Result-based forecast | Six editable inputs, fixed notional, expected cash/percentage returns, target profit, whole-trade count and outcome counts |
+| Reinvestment | Separate compounding what-if; never silently changes the fixed-notional forecast |
+| Public accounts | Create account links in desktop/mobile navigation, hero, Free pricing and final CTA; signup explains email confirmation; login preserves the destination |
+| Landing presentation | Removed the four requested hero scope chips; simpler workspace eyebrow and signup helper text |
+| Auth recovery | Safe parsing, invalid credentials vs provider outages, confirmation resend, preserved PKCE/destination cookies, validated public callbacks |
+| Ingestion | Source-date checks, preserved company/ISIN metadata, complete vs partial receipts backed by stored rows, unavailable 52-week metrics without sufficient finite history |
+| Scheduled digest | Canonical receipt table, configured-key guard, IST date and complete-session guard; no real digest email sent |
+| Migration drift | Exact canonical identities against replacement project, including historical stubs; malformed/missing/duplicate history and deleted migrations fail closed |
 
-The supplied 200,000 / 25% / 40% / 14% / 7% / 46% scenario produces 1,330
+The supplied 200,000 / 25% / 40% / 14% / 7% / 46% example produces 1,330
 expected cash profit per trade, 2.66% position return, 0.665% portfolio return,
-and **61 whole trades** to reach 80,000 expected profit. The printed estimate
-of 60 is approximate. Theoretical Kelly risk is disclosed separately and is
-not a recommended portfolio allocation.
+and **61 whole trades** for an 80,000 expected-profit target. The printed 60 is
+approximate. Kelly is a theoretical risk calculation, not a recommended
+portfolio allocation.
 
-Unknown returns, missing dates, and unavailable history are distinct states.
-Future exit dates are excluded. An edit that duplicates an ID across paginated
-history causes a recoverable unavailable response instead of corrupted totals.
-The recorded cash drawdown uses a running peak. Percentage account drawdown and
-realized R remain unknown without an account baseline/immutable initial risk.
+Missing returns, missing dates, breakevens and provider failures are distinct.
+Future exit dates are excluded. Pagination checks reject incomplete or duplicate
+history rather than corrupt totals. Cash drawdown uses a running peak; percentage
+account drawdown and realized R remain unknown without equity/initial-risk data.
+Forecast inputs survive both delayed successful and failed analytics requests.
 
-## Local verification
+## Verification and its limits
+
+The repeatable local runner at source `12e4c06` recorded:
 
 | Check | Result |
 | --- | --- |
-| Production Next build, including PWA and OG route | Passed; 59 prerendered routes |
-| Separate TypeScript check | Passed |
-| Frontend unit suite | 762 passed across 119 files |
-| ESLint | 0 errors; 14 existing warnings |
-| Backend suite | 474 passed; 1 skipped; 16 dependency/deprecation warnings |
-| Journal, OG/auth reliability, layout, workflow, signed-in browser suites | 76 passed |
-| Signup/confirmation and public release browser suites with mock authentication disabled | 13 passed |
-| Compiled production-server OG/auth/public browser checks | 21 passed (additional production-mode run, overlaps the above cases) |
-| Broker read-only contract | Passed; no broker orders submitted |
-| CI action/runtime and production target contract checks | Passed |
-| Disposable PostgreSQL 17 bootstrap/RLS harness | Passed, including rollback, replay guards, and two-user isolation |
+| ESLint | Pass; 0 errors, 14 existing warnings |
+| Production Next build and separate TypeScript check | Pass |
+| Frontend unit tests | 763 passed across 119 files |
+| Backend tests | 509 passed, 1 skipped, 31 warnings |
+| Journal/reliability/layout/workflow/signed-in browser suites | 78 passed |
+| Auth/confirmation/callback/public browser suites | 39 passed |
+| Disposable PostgreSQL 17 bootstrap, rollback and RLS fixtures | Pass |
+| Root npm audit | Fail; four high package findings from unpatched braces advisory |
+| Frontend npm audit | Fail; thirteen high package findings from the same advisory |
+| Service-role architecture gate | Fail; 19 existing router findings, reproduced identically on main |
+| Real hosted signup/API/market history | NOT_RUN in this local runner |
 
-Browser tests use controlled provider/API responses where needed. They do not
-prove confirmation-email delivery or authenticated access to a deployed backend.
-Mobile visual inspection verified the new metrics at a 390px viewport without
-page overflow. Demo analytics are explicitly labeled as a separate 95-trade
-synthetic example; the demo list's headline totals match its own three records.
+After the landing change at `80281b9`, lint, production build, TypeScript and all
+763 frontend tests passed again; 17 layout tests and eight public release tests
+passed. The changed hero assertion was reproduced failing before implementation.
+Review then reproduced a receipt-producer mismatch: an active universe can
+include symbols absent from a complete session file. Both ingestion paths now
+use source symbol counts before numeric filtering, keeping incomplete rows
+partial without repeatedly rejecting complete files. Four failing regressions
+passed after the correction; the full backend suite at `0f1632f` passed **513
+tests, one skip**, with the same 31 warnings. Source-session coverage is distinct
+from overall market/history coverage.
 
-This repository has no `make check` target. The checks above use its actual
-npm, pytest, Playwright, and PostgreSQL verification commands.
+The separate migration-gate harness passed 28 cases, including missing token,
+expired token, missing marker, shuffled valid history, lost leading zeros,
+duplicate history and deletion detection.
 
-## Hosted recovery evidence
+An earlier combined run exposed a stale landing-copy assertion (corrected) and
+one chart-drawing placement failure. The full 78-case rerun passed, and five
+additional focused placement repeats passed. The intermittent cause was not
+isolated; these results are not a claim that timing failures cannot recur.
 
-- Owner-created project `yodgbbrughcolslrnvqe`: `ACTIVE_HEALTHY`, PostgreSQL 17.
-- 62 canonical migration records and 34 public application tables, all RLS enabled.
-- Synthetic ownership fixtures rolled back; zero Auth users/candles remained.
-- Anonymous waitlist-email reads, client broker-order writes, and privileged
-  credential RPC calls denied. Security Advisor: zero WARN/ERROR, ten INFO
-  notices for intentional backend-only tables. [Advisor documentation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
-- Email provider, signup, email confirmation, and secure email change enabled;
-  anonymous sign-in/manual identity linking disabled. Minimum password length
-  saved as eight to match application validation.
-- Before cutover, exact deployment callback URLs and email delivery must be
-  configured and tested. The organization Usage page showed 27.4 MB database
-  size against a 500 MB allowance, with all displayed categories within quota.
-  Its grace-period banner describes enforcement rather than a current breach.
-  Measure capacity before broad EOD-history ingestion.
-- Existing Railway service deployments are `REMOVED`; its public endpoint
-  returns provider `Application not found`. Server credentials must be configured
-  securely for the new project before an approved backend deployment.
-- The preceding Vercel production build failed because the OG Edge Function
-  exceeded its size limit. The patch moves the route to the supported Node
-  runtime; hosted preview verification is recorded separately in the PR.
+Provider/API responses are controlled in local browser tests. Mock first-run
+signup → onboarding → starter watchlist verifies UI behavior, not Supabase
+confirmation delivery. Synthetic analytics are explicitly labeled and remain
+separate from live data. No broker orders or payment transactions were submitted.
+This repository has no `make check`; its real npm, pytest, Playwright and
+PostgreSQL commands are used.
 
-No old accounts, trades, or market history were recovered by initializing the
-replacement project. No synthetic data is presented as live market history.
+## Review
 
-## Review and remaining release gates
+The final structured review of `09f7258...0f1632f` returned no accepted/actionable
+findings (confidence 0.90). Its accepted receipt-producer finding was reproduced
+with failing tests, fixed in both ingestion paths, and covered by the full
+513-test backend run. Earlier reviews covered the Auth/SDK/forecast work. Code
+review was static; test execution and live checks are separate evidence.
 
-Structured local review identified duplicate pagination and hidden excluded-history
-coverage. Both were verified and fixed with failing-then-passing regressions.
-A later review found a stale Next subtree in the root Bun lock; it was regenerated
-from the npm lock, and both installers verified Next 16.3.8. The final rerun's
-result was clean: `autoreview --mode local` returned zero accepted/actionable
-findings after the fixes. The review inspected code; the verification runs above
-were performed separately. The formal Codex Security scan
-did not complete after a target-resolution error; manual auth/RLS review and
-runtime tests are not a completed formal scan.
+## Live state and remaining work
 
-Dependency upgrades fix the reviewed Next/PostCSS/serializer/selector issues.
-The npm audit still reports the unpatched braces advisory: four high root
-findings and thirteen high frontend findings, all transitive paths from the
-same advisory. See [dependency review](dependency-review.md). The existing audit
-gate is preserved and may block CI; findings are not suppressed to obtain green.
+- Vercel production deployment `dpl_9uoFd5HeWt4LbSeQixdtVgCsHjPd` is READY
+  at source `80281b95452a0c606ccbba11f4cba1380bc62413` on both production
+  domains; apex redirects to the canonical www origin. Public browser checks
+  verified direct signup links, no Request access links, and removal of all
+  four requested hero labels in the deployed DOM and screenshot. Production rejects
+  a nonexistent account with sanitized 401 copy; protected backend routes reject
+  missing/invalid tokens. The chart-share route returns a valid 1200×630 PNG.
+- Railway deployment `a8865e2a-f7f9-487a-8f96-5ea8d7aeb7e1` succeeded from
+  reviewed tracked source `0f1632fe6596cb514f6e203e17b5d5a2fd1fd948`. The
+  service was restored on the owner-selected Free plan. It includes only $1 per
+  month usage and may sleep/stop; health success does not establish always-on
+  scheduler operation. Broker execution, checkout and supplemental yfinance
+  refresh remain disabled.
+- Replacement Supabase has 62 migration records and 34 RLS-enabled application
+  tables. The October 15 Security Advisor check reported zero WARN/ERROR and ten intentional
+  backend-only INFO notices. Earlier quota evidence was 27.4 MB / 500 MB.
+- The October 15 count query returned zero Auth users, zero profiles, zero daily
+  candles and 45 seeded reference symbols. No old users, trades or prices were
+  recovered by creating the new project.
+- Production Auth Site URL is `https://www.alphavyuh.com`, with narrowly scoped
+  callback entries for production and reviewed preview origins. New server
+  credentials are configured privately; the obsolete Railway local JWT secret
+  was removed. Frontend production is forced to live data without mock fallback.
+- Resend verified `auth.alphavyuh.com` after the three owner-approved DNS records.
+  A fresh Supabase settings page still showed custom SMTP disabled. Its form is
+  prepared but unsaved. The owner must create/save the send-only key, enter the
+  SMTP password and submit it under the browser credential rule. Public
+  confirmation email cannot be declared working until then.
+- After SMTP is saved, verify a real owned email/password account through
+  confirmation, login, onboarding, owned watchlist/journal operations, analytics
+  and logout. Keep password creation and confirmation links out of chat.
+- Scanner/chart history needs an appropriately licensed data source and bounded
+  ingestion with measured storage/index growth. One session is insufficient for
+  200-day/52-week factors or five-year charts; RS requires 253 sessions. Do not
+  substitute synthetic data for missing live history.
 
-### Hosted preview and CI follow-up
+GitHub CI is not green. The corrected migration check still needs a valid
+Actions `SUPABASE_ACCESS_TOKEN`; connector sign-in does not create it. Existing
+service-role and braces findings remain visible. The formal Codex Security scan
+failed target resolution and did not produce a completed scan. Manual auth/RLS
+review and ordinary code review are separate evidence.
 
-The recovery Vercel preview built successfully with the new project's public
-URL/key and live-only data guards. Authenticated Vercel CLI checks returned:
-login page 200, nonexistent-account login 401 with sanitized copy, malformed
-signup 400, and complete 1200×630 chart-share PNG 200. No real account or email
-was created by those checks.
-
-Hosted testing exposed the inherited production-origin fallback in previews.
-A follow-up retains the initiating HTTPS deployment/branch origin only when it
-matches trusted Vercel system metadata. Explicit site configuration and production
-behavior remain authoritative. Spoofed/insecure hosts are rejected. Its focused
-structured review was clean, the full frontend suite passed 762 tests, and lint,
-production build, and TypeScript passed again.
-
-GitHub CI is not green: its existing service-role architecture checker reports
-the same 19 router violations on unchanged `origin/main` and this branch. The
-baseline was reproduced from a separate archive of main, with identical checker
-output. This needs an actual JWT-scoped-client migration; importing an unused
-client or broadening an allowlist would conceal the problem. Migration Drift
-Check fails with Supabase access-token authentication against its old project
-target. Agent regression gate passes lint/typecheck/unit steps, then fails the
-preserved root npm audit on braces. Local browser/backend runs remain separate
-evidence; CI's later steps did not execute after the audit failure.
-
-Production merge/deploy, server credential entry, public SMTP configuration,
-actual signup → email confirmation → login → authenticated API → logout, and
-licensed EOD ingestion remain release gates. Broker execution and billing remain
-disabled. See [recovery procedure](supabase-recovery.md) and
+See [recovery procedure](supabase-recovery.md), [dependency review](dependency-review.md),
+[pstack-informed workflow](development-workflow.md), and
 [portfolio narrative](engineering-portfolio.md).
 
 ## Agent summary
 
-**Done:** implemented the requested journal review metrics and forecast, hardened
-authentication/data boundaries, rebuilt the empty Supabase schema, and added
-regression/visual verification.
+**Done:** journal review analytics/forecast, public creation UX, auth/data
+hardening, replacement schema, API restoration, sender DNS verification and
+regression coverage.
 
-**Why:** incorrect statistics, silent missing data, and broken confirmation flows
-undermine trader trust and the value of an engineering demonstration.
+**Why:** a credible demonstration needs correct numbers, a clear first-run flow,
+and observed backend behavior.
 
-**Learned:** the canonical migrations had two historical ordering dependencies;
-healthy schema provisioning does not restore old users, email delivery, an API
-deployment, or licensed market data.
+**Learned:** schema provisioning, successful builds and domain verification do
+not establish email delivery, real authenticated writes or market-history
+coverage.
 
-**Improve next:** complete the hosted recovery gates, then measure large-history
-latency and implement immutable initial-risk snapshots before claiming realized
-R or full portfolio risk.
+**Improve next:** complete the prepared SMTP credential handoff and real account
+smoke, restore licensed history within measured capacity, then address the
+existing CI architecture/dependency findings before claiming launch readiness.

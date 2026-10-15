@@ -51,7 +51,9 @@ scope. Do not reuse an older clean review for changed code.
 
 The [current evidence](analytics-recovery-verification.md) includes known root
 and frontend audit failures, inherited service-role architecture failures, and
-an old-target migration-authentication failure. Keep them visible. Do not
+a migration-authentication failure that requires a valid Actions token. The
+drift workflow now targets the replacement project and tests exact migration
+identities, including historical stubs. Keep them visible. Do not
 introduce unused imports, broaden an allowlist, suppress an advisory, or relabel
 a skip to obtain green.
 
