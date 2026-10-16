@@ -27,6 +27,7 @@ type SearchResult = SymbolResult | CommandResult
 
 const COMMAND_RESULTS: CommandResult[] = [
   { command: 'dashboard workflow', label: 'Open Dashboard', detail: 'Daily checkpoint: review due, data health, watchlist focus', href: '/dashboard' },
+  { command: 'market pulse breadth sectors', label: 'Open Market Pulse', detail: 'Breadth, participation, and sector leadership before scanning', href: '/analytics' },
   { command: 'journal review', label: 'Review Journal', detail: 'Close the learning loop and process notes', href: '/journal?review=needs-review' },
   { command: 'watchlist desk', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
   { command: 'scanner discovery', label: 'Discover Setups', detail: 'Find candidates to feed watchlist and journal review', href: '/scanner' },

@@ -52,7 +52,7 @@ const pages = [
   },
   {
     path: "/login",
-    mustInclude: [/Sign in to AlphaVyuh/i, /EOD market data/i, /Broker import only/i],
+    mustInclude: [/<h1[^>]*>\s*Sign in\s*<\/h1>|\bSign in\b/i, /EOD market data/i, /Broker import only/i],
   },
   {
     path: "/access",

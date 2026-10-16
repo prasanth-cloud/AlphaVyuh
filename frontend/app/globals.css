@@ -4743,6 +4743,55 @@ input, textarea, select {
   box-shadow: inset 2px 0 0 rgba(77,214,255,0.55);
 }
 
+/* Market Pulse keeps market context optional, quiet, and data-first. */
+.market-pulse-page { display: grid; gap: 16px; max-width: 1440px; margin: 0 auto; }
+.market-pulse-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.market-pulse-header .app-page-title { margin: 4px 0 6px; }
+.market-pulse-header p { max-width: 720px; line-height: 1.55; }
+.market-pulse-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.market-pulse-provenance { display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 12px; }
+.market-pulse-provenance span { display: inline-flex; align-items: center; gap: 4px; }
+.market-pulse-notice { padding: 10px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-1); color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.market-pulse-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.market-pulse-summary-value { display: block; margin: 6px 0 4px; color: var(--text-primary); font-size: 22px; font-weight: 700; }
+.market-pulse-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.market-pulse-lower-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 12px; }
+.market-pulse-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.market-pulse-card-head h2 { margin: 0 0 4px; color: var(--text-primary); font-size: 15px; font-weight: 650; }
+.market-pulse-chart svg { display: block; width: 100%; height: auto; min-height: 200px; }
+.market-pulse-legend { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-top: 10px; color: var(--text-secondary); font-size: 12px; }
+.market-pulse-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.market-pulse-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 999px; }
+.market-pulse-range { margin-left: auto; }
+.market-pulse-values { margin-top: 12px; border-top: 1px solid var(--border-subtle); padding-top: 10px; }
+.market-pulse-values summary { width: fit-content; cursor: pointer; color: var(--text-secondary); font-size: 12px; }
+.market-pulse-table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.market-pulse-table-scroll table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+.market-pulse-table-scroll th, .market-pulse-table-scroll td { padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); text-align: right; white-space: nowrap; }
+.market-pulse-table-scroll th:first-child, .market-pulse-table-scroll td:first-child { text-align: left; }
+.market-pulse-sector-table td:first-child span { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 11px; }
+.market-pulse-svg-label { fill: var(--text-tertiary); font-size: 11px; }
+.market-pulse-svg-sector { fill: var(--text-secondary); font-size: 10px; }
+.market-pulse-svg-axis { fill: var(--text-tertiary); font-size: 10px; }
+.market-pulse-methodology { margin-top: 12px; line-height: 1.55; }
+.market-pulse-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 4px 2px; color: var(--text-tertiary); font-size: 11px; }
+.market-pulse-loading { display: grid; gap: 12px; }
+.market-pulse-loading div { min-height: 150px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-1); }
+
+@media (max-width: 980px) {
+  .market-pulse-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-pulse-grid, .market-pulse-lower-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .market-pulse-summary { grid-template-columns: minmax(0, 1fr); }
+  .market-pulse-actions { width: 100%; }
+  .market-pulse-actions a { flex: 1 1 auto; text-align: center; }
+  .market-pulse-range { width: 100%; margin-left: 0; }
+  .market-pulse-chart svg { min-width: 520px; }
+  .market-pulse-chart { overflow-x: auto; }
+}
+
 /* Light theme bridge for older pages that still use hard-coded Tailwind colors. */
 :root[data-theme="light"] [class*="bg-[#05090c]"],
 :root[data-theme="light"] [class*="bg-[#0f0f0e]"],

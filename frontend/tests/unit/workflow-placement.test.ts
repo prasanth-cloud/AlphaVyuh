@@ -25,6 +25,7 @@ describe("workflow placement", () => {
   it("maps protected routes to friendly labels for auth redirect copy", () => {
     expect(resolveAppRouteLabel("/scanner")).toBe("Scanner");
     expect(resolveAppRouteLabel("/dashboard")).toBe("Dashboard");
+    expect(resolveAppRouteLabel("/analytics")).toBe("Market Pulse");
     expect(resolveAppRouteLabel("/watchlist")).toBe("Watchlist");
     expect(resolveAppRouteLabel("/journal?review=needs-review")).toBe("Journal");
     expect(resolveAppRouteLabel("/charts/RELIANCE")).toBe("Chart");

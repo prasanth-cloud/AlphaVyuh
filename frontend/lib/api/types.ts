@@ -944,6 +944,74 @@ export type BacktestResponse = {
   results: BacktestResult[];
 };
 
+export type MarketBreadthHistoryPoint = {
+  date: string;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  total: number;
+  advance_decline_ratio: number | null;
+  advance_pct: number | null;
+  above_ema20_pct: number | null;
+  above_ema50_pct: number | null;
+  above_ema200_pct: number | null;
+  new_52w_highs: number | null;
+  new_52w_lows: number | null;
+};
+
+export type MarketSectorParticipation = {
+  sector: string;
+  rank: number;
+  constituents: number;
+  advances: number;
+  declines: number;
+  return_5d_pct: number | null;
+  return_20d_pct: number | null;
+  breadth_pct: number | null;
+};
+
+export type MarketRotationPoint = {
+  sector: string;
+  strength_score: number;
+  momentum_score: number;
+  quadrant: "Leading" | "Weakening" | "Lagging" | "Improving";
+  return_20d_pct: number | null;
+  momentum_delta_pct: number | null;
+};
+
+export type MarketAnalyticsBundle = {
+  trade_date: string | null;
+  phase: string;
+  breadth_history: MarketBreadthHistoryPoint[];
+  sector_leaderboard: MarketSectorParticipation[];
+  rotation_points: MarketRotationPoint[];
+  summary: {
+    advances: number | null;
+    declines: number | null;
+    advance_decline_ratio: number | null;
+    above_ema20_pct: number | null;
+    above_ema50_pct: number | null;
+    above_ema200_pct: number | null;
+    new_52w_highs: number | null;
+    new_52w_lows: number | null;
+  };
+  rotation_label: string;
+  rotation_methodology: string;
+  lookback_sessions: number;
+  completeness: {
+    status: "complete" | "partial" | "unknown";
+    latest_session_rows: number;
+    active_universe: number | null;
+    coverage_pct: number | null;
+    sessions_requested: number;
+    sessions_available: number;
+  };
+  generated_at: string | null;
+  source_metadata?: SourceMetadata;
+  cache_status?: string;
+  mode?: string;
+};
+
 export type SharedScreen = {
   id: string;
   user_id: string;
