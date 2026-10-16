@@ -4,16 +4,7 @@ import { buildWatchlistTriageSummary, type WatchlistTriageBrokerContext } from "
 export type DashboardBriefStatus = "ready" | "action" | "warn" | "empty";
 
 export type DashboardBriefItem = {
-  id: "market" | "scanner" | "watchlist" | "journal" | "import";
-  label: string;
-  value: string;
-  detail: string;
-  href: string;
-  status: DashboardBriefStatus;
-};
-
-export type DashboardCockpitInstrument = {
-  id: "session" | "queue" | "risk" | "review" | "import";
+  id: "market" | "scanner" | "watchlist" | "risk" | "journal" | "import";
   label: string;
   value: string;
   detail: string;
@@ -26,6 +17,7 @@ export type DashboardActionBriefInput = {
   marketPhase: string | null;
   marketDataStatus: "healthy" | "degraded" | "stale" | "unknown" | null;
   marketDataMode?: string | null;
+  marketRefreshFailed?: boolean;
   trackedSymbols: number;
   watchlistReviewDue: number;
   scanAlerts: number;
@@ -50,7 +42,6 @@ export type DashboardActionBrief = {
   headline: string;
   nextAction: DashboardBriefItem;
   items: DashboardBriefItem[];
-  instruments: DashboardCockpitInstrument[];
   prioritySymbols: DashboardPrioritySymbol[];
 };
 
@@ -86,7 +77,8 @@ function formatDate(raw: string | null) {
 }
 
 export function buildDashboardActionBrief(input: DashboardActionBriefInput): DashboardActionBrief {
-  const marketNeedsCheck = input.accountIssueCount > 0 ||
+  const marketNeedsCheck = input.marketRefreshFailed === true ||
+    input.accountIssueCount > 0 ||
     input.marketDataStatus === "degraded" ||
     input.marketDataStatus === "stale";
   const market: DashboardBriefItem = {
@@ -163,6 +155,24 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
           status: "ready",
         };
 
+  const openRisk: DashboardBriefItem = input.openTrades > 0
+    ? {
+        id: "risk",
+        label: "Open risk",
+        value: `${input.openTrades} open`,
+        detail: "Check stop, target, and invalidation",
+        href: "/watchlist",
+        status: "action",
+      }
+    : {
+        id: "risk",
+        label: "Open risk",
+        value: "Flat",
+        detail: "No open plans in the loaded journal sample.",
+        href: "/journal",
+        status: "ready",
+      };
+
   const unreviewedTrades = input.knownUnreviewedTrades ?? Math.max(0, input.closedTrades - input.reviewedTrades);
   const journal: DashboardBriefItem = input.closedTrades === 0
     ? {
@@ -179,20 +189,27 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
       ? {
           id: "journal",
           label: "Journal learning",
-          value: `${unreviewedTrades} unreviewed`,
+          value: `${unreviewedTrades} due`,
           detail: input.reviewCoveragePartial === true
             ? "Loaded journal sample has closed trades that still need lessons."
             : `${input.reviewedTrades}/${input.closedTrades} closed trades have lessons captured.`,
-          href: "/journal",
+          href: "/journal?review=needs-review",
           status: "action",
         }
-      : {
+      : input.reviewCoveragePartial === true
+        ? {
+            id: "journal",
+            label: "Journal learning",
+            value: "Coverage partial",
+            detail: "Loaded journal sample is reviewed; full-history review state is unknown.",
+            href: "/journal?tab=analytics",
+            status: "warn",
+          }
+        : {
           id: "journal",
           label: "Journal learning",
-          value: input.reviewCoveragePartial === true ? "Recent reviewed" : "Reviewed",
-          detail: input.reviewCoveragePartial === true
-            ? "Loaded journal sample has review context; full history may extend beyond this page."
-            : `${input.closedTrades} closed trades have review context.`,
+          value: "Reviewed",
+          detail: `${input.closedTrades} closed trades have review context.`,
           href: "/journal?tab=analytics",
           status: "ready",
         };
@@ -217,74 +234,12 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
         status: "warn",
       };
 
-  const items = [market, scanner, watchlist, journal, brokerImport];
+  const items = [market, scanner, watchlist, openRisk, journal, brokerImport];
   const nextAction = items.find((item) => item.status === "warn") ??
     items.find((item) => item.status === "action") ??
     items.find((item) => item.status === "empty") ??
     scanner;
   const readyCount = items.filter((item) => item.status === "ready").length;
-  const instruments: DashboardCockpitInstrument[] = [
-    {
-      id: "session",
-      label: "Session",
-      value: marketNeedsCheck ? "Verify" : input.marketPhase || "Ready",
-      detail: marketNeedsCheck
-        ? "Market data gate needs attention"
-        : `${input.marketDataMode === "demo" ? "Demo" : "EOD"} as of ${formatDate(input.tradeDate)}`,
-      href: market.href,
-      status: market.status,
-    },
-    {
-      id: "queue",
-      label: "Queue",
-      value: input.trackedSymbols > 0 ? `${input.trackedSymbols} tracked` : "No queue",
-      detail: input.alertMatchSymbols > 0
-        ? `${plural(input.alertMatchSymbols, "scan match", "scan matches")} waiting`
-        : input.scanAlerts > 0
-          ? `${plural(input.scanAlerts, "saved scan")} armed`
-          : "Run scanner to build candidates",
-      href: input.trackedSymbols > 0 ? "/watchlist" : "/scanner",
-      status: input.trackedSymbols > 0 ? (input.watchlistReviewDue > 0 ? "action" : "ready") : "empty",
-    },
-    {
-      id: "risk",
-      label: "Open risk",
-      value: input.openTrades > 0 ? `${input.openTrades} open` : "Flat",
-      detail: input.openTrades > 0
-        ? "Check stop, target, and invalidation"
-        : "No open plans in journal sample",
-      href: input.openTrades > 0 ? "/watchlist" : "/journal",
-      status: input.openTrades > 0 ? "action" : "ready",
-    },
-    {
-      id: "review",
-      label: "Review",
-      value: input.closedTrades === 0
-        ? "No closes"
-        : unreviewedTrades > 0
-          ? `${unreviewedTrades} due`
-          : input.reviewCoveragePartial === true ? "Recent clear" : "Clear",
-      detail: input.closedTrades === 0
-        ? "Close or import trades for lessons"
-        : unreviewedTrades > 0
-          ? "Closed trades need journal lessons"
-          : input.reviewCoveragePartial === true
-            ? "Loaded sample has review context"
-            : `${input.reviewedTrades}/${input.closedTrades} reviewed`,
-      href: unreviewedTrades > 0 ? "/journal?review=needs-review" : "/journal?tab=analytics",
-      status: input.closedTrades === 0 ? "empty" : unreviewedTrades > 0 ? "action" : "ready",
-    },
-    {
-      id: "import",
-      label: "Import",
-      value: input.brokerConnected ? "Read-only" : "Offline",
-      detail: input.brokerConnected
-        ? input.brokerLastSyncedAt ? `Synced ${input.brokerLastSyncedAt}` : input.brokerStatusLabel || "Connected for reconciliation"
-        : input.brokerStatusLabel || "Broker execution remains disabled",
-      href: "/settings/broker",
-      status: input.brokerConnected ? "ready" : "warn",
-    },
-  ];
 
   return {
     readyCount,
@@ -292,8 +247,7 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
     headline: `${readyCount}/${items.length} desk signals ready`,
     nextAction,
     items,
-    instruments,
-    prioritySymbols: (input.prioritySymbols ?? []).slice(0, 4),
+    prioritySymbols: (input.prioritySymbols ?? []).slice(0, 2),
   };
 }
 

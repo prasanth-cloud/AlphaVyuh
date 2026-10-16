@@ -234,15 +234,9 @@ test.describe("Workflow layout smoke", () => {
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-workspace-switcher")).toContainText("Session");
     await expect(page.getByTestId("dashboard-action-brief")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("dashboard-index-tape")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-cockpit-instruments")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-cockpit-instruments")).toContainText(/Session|Queue|Open risk|Review|Import/);
-    await expect(page.getByTestId("dashboard-cockpit-instruments")).toContainText(/Read-only|Offline/);
-    await expect(page.getByTestId("dashboard-broker-flight-status")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-broker-flight-status")).toContainText(/Broker flight status/);
-    await expect(page.getByTestId("dashboard-broker-flight-status")).toContainText(/No broker order activity|Broker lifecycle clear/);
+    await expect(page.getByTestId("dashboard-action-brief")).toContainText(/Review queue|Continue workflow|Open risk|Read-only import/);
     await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("dashboard");
@@ -258,16 +252,15 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
   });
 
-  test("dashboard full desk lazy modules remain available on demand", async ({ page }) => {
+  test("dashboard keeps one compact decision surface", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-data-confidence")).not.toBeVisible();
-
-    await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
-
-    await expect(page.getByTestId("dashboard-data-confidence")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-risk-control")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-import-reconciliation")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-action-brief")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByTestId("dashboard-workspace-switcher")).toHaveCount(0);
+    await expect(page.getByTestId("dashboard-data-confidence")).toHaveCount(0);
+    await expect(page.getByTestId("dashboard-risk-control")).toHaveCount(0);
+    await expect(page.getByTestId("dashboard-import-reconciliation")).toHaveCount(0);
   });
 
   test("requested workspace copy and reminder strip are removed", async ({ page }) => {
@@ -313,9 +306,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/3M · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
-    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveAttribute("aria-disabled", "true");
-    await page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true }).click({ force: true });
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available on the EOD data plan yet/i);
+    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveCount(0);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/Data as of \d{4}-\d{2}-\d{2}/i);
