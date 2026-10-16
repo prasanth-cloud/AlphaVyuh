@@ -99,6 +99,8 @@ def test_get_current_user_id_hides_provider_errors(monkeypatch):
         (400, "bad_jwt", "Invalid JWT", 401),
         (401, "bad_jwt", "JWT expired", 401),
         (403, "user_banned", "User is banned", 401),
+        (401, "", "Invalid API key", 503),
+        (401, "invalid_api_key", "Provider rejected application configuration", 503),
         (403, "", "Service restricted: exceed_db_size_quota", 503),
         (500, "unexpected_failure", "Secret database detail", 503),
         (400, "unexpected_failure", "Secret database detail", 503),

@@ -62,7 +62,9 @@ def _auth_provider_error(error: Exception) -> HTTPException:
         "exceed_db_size_quota", "restricted due to the following violations",
         "remove spend caps", "upgrade their plan",
     ))
-    if restricted or provider_status >= 500 or provider_status == 408 or code in {
+    # A rejected application key is a server configuration failure, not a bad user session.
+    invalid_api_key = code == "invalid_api_key" or "invalid api key" in message
+    if restricted or invalid_api_key or provider_status >= 500 or provider_status == 408 or code in {
         "unexpected_failure", "request_timeout",
     }:
         return HTTPException(
