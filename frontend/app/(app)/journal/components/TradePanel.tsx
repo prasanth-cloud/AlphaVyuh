@@ -382,7 +382,7 @@ export function TradePanel({
                 ["Holding days", String(selectedEntry.holding_days ?? "—")],
                 ["Stop loss", selectedEntry.stop_loss ? `₹${selectedEntry.stop_loss.toLocaleString("en-IN")}` : "—"],
                 ["Target", selectedEntry.target_price ? `₹${selectedEntry.target_price.toLocaleString("en-IN")}` : "—"],
-                ["R:R", String(selectedEntry.risk_reward ?? "—")],
+                ["Planned R:R", String(selectedEntry.risk_reward ?? "—")],
                 ["P&L", selectedEntry.pnl != null ? fmtCcy(selectedEntry.pnl) : "Open"],
               ].map(([k, v]) => (
                 <div key={k}>

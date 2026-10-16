@@ -313,9 +313,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/3M · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
-    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveAttribute("aria-disabled", "true");
-    await page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true }).click({ force: true });
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available on the EOD data plan yet/i);
+    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveCount(0);
+    await expect(page.locator(".watchlist-chart-header")).not.toContainText("Live intraday bars");
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/Data as of \d{4}-\d{2}-\d{2}/i);
@@ -386,9 +385,10 @@ test.describe("Workflow layout smoke", () => {
 
   test("account access labels and no-execution posture are visible", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Account access/i);
-    await expect(page.locator("body")).toContainText(/EOD market data/i);
-    await expect(page.locator("body")).toContainText(/Broker import only/i);
+    await expect(page.getByRole("link", { name: /^Create account/ }).first()).toHaveAttribute("href", "/signup");
+    await expect(page.getByRole("link", { name: /Request access/i })).toHaveCount(0);
+    await expect(page.locator("#lp-hero")).toContainText("Your trading workspace");
+    await expect(page.locator('[aria-label="Product scope"]')).toHaveCount(0);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Billing is enabled|Checkout opens|No production Razorpay payment/i);
     await expect(page.locator("body")).not.toContainText(/Professional Access/i);

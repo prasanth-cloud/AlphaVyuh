@@ -22,9 +22,14 @@ export function allowMockAppAuth() {
 }
 
 export function isPublicProductionRuntime() {
+  const allowPreviewData = typeof window === "undefined"
+    ? allowPreviewMockAuth()
+    : process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" &&
+      process.env.NEXT_PUBLIC_FORCE_LIVE_DATA !== "true" &&
+      !hasSupabasePublicEnv();
+
   return process.env.NODE_ENV === "production" &&
-    hasSupabasePublicEnv() &&
-    process.env.PLAYWRIGHT_MOCK_AUTH !== "true";
+    !allowPreviewData;
 }
 
 export function allowClientMockFallback() {

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Bookmark, ListFilter, NotebookPen } from "lucide-react";
 import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 import { BrandLogoMark } from "@/components/BrandLogoMark";
 import {
@@ -225,7 +226,7 @@ export default function LandingPage() {
     };
   }, []);
 
-  const heroRows = tapeState === "live" ? topMovers(tapeQuotes, 5) : [];
+  const heroRows = tapeState === "live" ? topMovers(tapeQuotes, 4) : [];
   const scrollingTapeQuotes = tapeState === "live" ? [...tapeQuotes, ...tapeQuotes] : [];
 
   return (
@@ -251,7 +252,7 @@ export default function LandingPage() {
               {theme === "light" ? "Dark" : "Light"}
             </button>
             <Link href="/login" className="lp-btn-ghost">Sign in</Link>
-            <Link href="/signup" className="lp-btn-cta">Get started →</Link>
+            <Link href="/signup" className="lp-btn-cta">Create account →</Link>
           </div>
           <button
             type="button"
@@ -279,7 +280,7 @@ export default function LandingPage() {
                 {theme === "light" ? "Dark" : "Light"}
               </button>
               <Link href="/login" className="lp-btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
-              <Link href="/signup" className="lp-btn-cta" onClick={() => setMenuOpen(false)}>Get started →</Link>
+              <Link href="/signup" className="lp-btn-cta" onClick={() => setMenuOpen(false)}>Create account →</Link>
             </div>
           </div>
         )}
@@ -287,137 +288,62 @@ export default function LandingPage() {
 
       {/* HERO */}
       <section id="lp-hero">
-        <div className="lp-grid-overlay"></div>
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
-            <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Terminal workflow · EOD market data</div>
-            </div>
+            <p className="lp-eyebrow">Your trading workspace</p>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">A trader cockpit for scanning, planning, and reviewing Indian equities.</span>
+              <span className="lp-h1-s1">Clarity before</span>{" "}
+              <span className="lp-h1-s2">every trade.</span>
             </h1>
-            <p className="lp-sub">Start with market breadth, jump into high-quality EOD scanners, review TradingView-style charts, build a watchlist, then save the decision trail into your journal.</p>
+            <p className="lp-sub">Screen stocks, organize your watchlist, and review your performance. One focused workspace for your trading day.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Request access →</Link>
-              <a href="#how" className="lp-btn-secondary">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
-                See workflow
-              </a>
+              <Link href="/signup" className="lp-btn-primary">Create account <ArrowRight size={16} aria-hidden="true" /></Link>
+              <a href="#features" className="lp-btn-secondary">Explore features <ArrowRight size={16} aria-hidden="true" /></a>
             </div>
-            <div className="lp-trust-row" aria-label="Product scope">
-              <span>EOD market data</span>
-              <span>NSE/BSE cash equity</span>
-              <span>No trade calls</span>
-              <span>Order ticket drafts journal only</span>
-            </div>
-            <div className="lp-terminal-strip" aria-label="Terminal workflow status">
-              <div><span>Scan</span><strong>precomputed EOD factors</strong></div>
-              <div><span>Chart</span><strong>RS, pivots, drawings</strong></div>
-              <div><span>Journal</span><strong>plan to outcome</strong></div>
-            </div>
+            <p className="lp-hero-note">Start on Free. No credit card required.</p>
           </div>
 
-          {/* Hero visual */}
           <div className="lp-hero-visual">
-            <div className="lp-hero-card lp-terminal-surface">
-              <div className="lp-card-bar">
-                <div className="lp-dot" style={{background:"#FF5F57"}}></div>
-                <div className="lp-dot" style={{background:"#FFBD2E"}}></div>
-                <div className="lp-dot" style={{background:"#28CA41"}}></div>
-                <span className="lp-card-title">
-                  {tapeState === "live" ? "Market movers · latest session" : "Market movers"}
-                </span>
-              </div>
+            <section className="lp-hero-card" aria-label="Market snapshot">
+              <header className="lp-preview-header">
+                <div className="lp-preview-brand"><BrandLogoMark /><span>AlphaVyuh</span></div>
+                <span className="lp-preview-caption">Workspace preview</span>
+              </header>
               <div className="lp-card-body">
-                <div className="lp-command-strip" aria-label="Desk command status">
-                  <div>
-                    <span>Data date</span>
-                    <strong>{tapeState === "live" ? "Latest EOD" : "Waiting"}</strong>
-                  </div>
-                  <div>
-                    <span>Scanner path</span>
-                    <strong>cache-first</strong>
-                  </div>
-                  <div>
-                    <span>Order path</span>
-                    <strong>journal draft</strong>
-                  </div>
+                <div className="lp-preview-title">
+                  <div><h2>Market snapshot</h2><p>Selected market movers</p></div>
+                  <span className="lp-preview-state">{tapeState === "live" ? "Latest available" : tapeState === "loading" ? "Loading" : "Unavailable"}</span>
                 </div>
-                {tapeState === "unavailable" ? (
-                  <p className="lp-tape-unavailable">Live quotes are temporarily unavailable. Market movers will return shortly.</p>
-                ) : (
-                  <>
-                    <div className="lp-col-header">
-                      <div className="lp-col-h">Stock</div>
-                      <div className="lp-col-h">Price</div>
-                      <div className="lp-col-h">Change</div>
+                <div className="lp-preview-quotes" aria-busy={tapeState === "loading"}>
+                  {tapeState !== "live" ? (
+                    <div className="lp-preview-message" role="status">
+                      <ListFilter size={24} aria-hidden="true" />
+                      <p>{tapeState === "loading" ? "Loading market snapshot…" : "Market quotes are temporarily unavailable."}</p>
+                      {tapeState === "unavailable" && <a href="#features">Explore the workspace <ArrowRight size={14} aria-hidden="true" /></a>}
                     </div>
-                    <div>
-                      {heroRows.map((quote, index) => (
-                        <div
-                          key={quote.symbol}
-                          className="lp-srow"
-                          style={{ animationDelay: `${index * 0.06}s` }}
-                        >
-                          <div>
-                            <div className="lp-sym">{quote.label}</div>
-                            <div className="lp-sym-sub">{quote.isIndex ? "INDEX" : "NSE EQ"}</div>
-                          </div>
-                          <div className="lp-pval">₹{formatTapePrice(quote.price)}</div>
-                          <div className={quote.changePct >= 0 ? "lp-chg-pos" : "lp-chg-neg"}>
-                            {formatTapeChange(quote.changePct)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                <div className="lp-workstation-grid" aria-label="Trading workstation preview">
-                  <div className="lp-mini-chart">
-                    <div className="lp-mini-chart-head">
-                      <span>Chart review</span>
-                      <strong>RS + levels</strong>
-                    </div>
-                    <div className="lp-candle-board" aria-hidden="true">
-                      {[38, 52, 45, 61, 57, 70, 64, 78, 73, 84].map((height, index) => (
-                        <span
-                          key={index}
-                          className={index % 3 === 1 ? "lp-candle lp-candle-down" : "lp-candle"}
-                          style={{ height: `${height}%` }}
-                        />
-                      ))}
-                      <div className="lp-level-line lp-level-line-top" />
-                      <div className="lp-level-line lp-level-line-mid" />
-                    </div>
-                    <div className="lp-mini-chart-foot">
-                      <span>Watchlist context</span>
-                      <span>5Y EOD range</span>
-                    </div>
-                  </div>
-                  <div className="lp-flow-queue">
-                    <div className="lp-flow-head">Desk queue</div>
-                    {[
-                      ["Scan", "169 matches", "hot"],
-                      ["Watch", "24 tracked", "steady"],
-                      ["Journal", "6 reviews due", "warn"],
-                    ].map(([label, value, tone]) => (
-                      <div key={label} className="lp-flow-row">
-                        <span className={`lp-flow-dot lp-flow-dot-${tone}`} />
-                        <div>
-                          <span>{label}</span>
-                          <strong>{value}</strong>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  ) : (
+                    <table className="lp-preview-table">
+                      <thead><tr><th scope="col">Symbol</th><th scope="col">Last price</th><th scope="col">Change</th></tr></thead>
+                      <tbody>
+                        {heroRows.map((quote) => (
+                          <tr key={quote.symbol}>
+                            <th scope="row"><span className="lp-preview-symbol">{quote.label}</span><span className="lp-preview-exchange">{quote.isIndex ? "Index" : "NSE"}</span></th>
+                            <td>₹{formatTapePrice(quote.price)}</td>
+                            <td><span className={quote.changePct >= 0 ? "lp-preview-gain" : "lp-preview-loss"}>{formatTapeChange(quote.changePct)}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
-                <div className="lp-cockpit-panel">
-                  <div className="lp-cockpit-row"><span>Market state</span><strong>{tapeState === "live" ? "Latest session loaded" : "Checking tape"}</strong></div>
-                  <div className="lp-cockpit-row"><span>Scanner latency target</span><strong>cache + paged API first</strong></div>
-                  <div className="lp-cockpit-row"><span>Broker posture</span><strong>import and journal capture</strong></div>
-                </div>
+                <p className="lp-preview-source">Latest available quotes · Prices may be delayed</p>
               </div>
-            </div>
+              <div className="lp-preview-flow" aria-label="Connected trading workflow">
+                <span><ListFilter size={16} aria-hidden="true" />Discover</span>
+                <span><Bookmark size={16} aria-hidden="true" />Plan</span>
+                <span><NotebookPen size={16} aria-hidden="true" />Review</span>
+              </div>
+            </section>
           </div>
         </div>
       </section>
@@ -668,10 +594,10 @@ export default function LandingPage() {
             <div className="lp-pcard lp-fade">
               <span className="lp-plan-tier">Free</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-free">0</span><span className="lp-pper">/mo</span></div>
-              <p className="lp-pdesc">Enough to try everything. No credit card needed.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-free">Get started <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
+              <p className="lp-pdesc">Start with the core workflow. No credit card needed.</p>
+              <Link href="/signup" className="lp-pcta lp-cta-free">Create account <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
               <div className="lp-pfeats">
-                {[["50 scanner results per scan",true],["3 saved presets",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import",false]].map(f=>(
+                {[["50 scanner results per scan",true],["3 saved presets",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal analytics",true],["Broker import",false]].map(f=>(
                   <div key={f[0] as string} className={"lp-pfi"+(f[1]?" lp-pfi-on":"")}>
                     <div className={"lp-pfcheck"+(f[1]?" lp-pfcheck-on":" lp-pfcheck-off")}>{f[1]?"✓":"–"}</div>
                     {f[0]}
@@ -686,7 +612,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
               <Link href="/signup" className="lp-pcta lp-cta-pro">Get started with Pro <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
               <div className="lp-pfeats">
-                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import",true],["Journal review",true],["Priority support",true]].map(f=>(
+                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import",true],["AI journal review",true],["Priority support",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -722,11 +648,11 @@ export default function LandingPage() {
       {/* FINAL CTA */}
       <section style={{padding:"120px 0",textAlign:"center",position:"relative",overflow:"hidden"}}>
         <div style={{position:"relative",zIndex:1}}>
-          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Account access</div>
+          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Start on Free</div>
           <h2 className="lp-sec-title lp-final-title" style={{marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Scan after market close, keep the reason, plan levels, and review what happened.</p>
-          <Link href="/signup" className="lp-btn-cta-big">Get started →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Account access · EOD market data · Broker import only · No investment advice</p>
+          <Link href="/signup" className="lp-btn-cta-big">Create account →</Link>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Create a Free account to start. No credit card required.</p>
         </div>
       </section>
 
@@ -786,67 +712,51 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-btn-cta{padding:10px 18px;border-radius:999px;font-size:.9375rem;font-weight:600;background:var(--lp-accent);color:var(--text-on-accent);text-decoration:none;transition:all .2s;box-shadow:0 6px 20px rgba(0,0,0,.18)}
 .lp-btn-cta:hover{box-shadow:0 10px 26px rgba(0,0,0,.24);transform:translateY(-1px)}
 .lp-nav-links a:focus-visible,.lp-btn-ghost:focus-visible,.lp-btn-cta:focus-visible,.lp-btn-primary:focus-visible,.lp-btn-secondary:focus-visible,.lp-theme-toggle:focus-visible,.lp-nav-burger:focus-visible,.lp-tab-btn:focus-visible,.lp-pcta:focus-visible,.lp-btn-cta-big:focus-visible,.lp-faq-q:focus-visible{outline:2px solid var(--lp-accent);outline-offset:2px}
-#lp-hero{display:flex;align-items:center;padding:132px 0 80px;position:relative;overflow:hidden}
-#lp-hero::before{content:"";position:absolute;top:-20%;right:-10%;width:min(52vw,620px);height:min(52vw,620px);background:radial-gradient(circle,rgba(214,223,232,.09) 0%,transparent 68%);pointer-events:none}
-.lp-grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse at 40% 40%,black 22%,transparent 78%);-webkit-mask-image:radial-gradient(ellipse at 40% 40%,black 22%,transparent 78%);pointer-events:none;opacity:.55}
-:root[data-theme="light"] .lp-grid-overlay{background-image:linear-gradient(rgba(15,23,42,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(15,23,42,.04) 1px,transparent 1px)}
-.lp-hero-inner{max-width:1160px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:1.05fr .95fr;gap:72px;align-items:center;position:relative;z-index:1}
-.lp-eyebrow{display:flex;align-items:center;gap:8px;margin-bottom:24px}
-.lp-live-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(214,223,232,.08);border:1px solid rgba(214,223,232,.2);border-radius:20px;padding:5px 12px;font-size:var(--lp-type-micro);font-weight:600;color:var(--lp-accent);letter-spacing:0;text-transform:none}
-:root[data-theme="light"] .lp-live-pill{background:rgba(15,23,42,.04);border-color:rgba(15,23,42,.12);color:#0f172a}
-.lp-pulse{width:7px;height:7px;background:var(--lp-accent);border-radius:50%;animation:lp-pulse 2s ease-in-out infinite;flex-shrink:0}
-@keyframes lp-pulse{0%,100%{box-shadow:0 0 0 0 rgba(214,223,232,.5)}50%{box-shadow:0 0 0 7px rgba(214,223,232,0)}}
-.lp-h1{font-size:var(--lp-type-display);font-weight:600;line-height:var(--lp-lh-tight);letter-spacing:var(--lp-track-tight);margin-bottom:20px}
-.lp-h1-s1{display:block;color:var(--lp-text)}
-.lp-sub{font-size:1.125rem;font-weight:400;color:var(--lp-text2);line-height:var(--lp-lh-body);margin-bottom:32px;max-width:34rem}
-.lp-ctas{display:flex;align-items:center;gap:12px;margin-bottom:36px;flex-wrap:wrap}
-.lp-btn-primary{display:inline-flex;align-items:center;gap:8px;padding:12px 26px;background:var(--lp-accent);color:var(--text-on-accent);border-radius:999px;font-weight:600;font-size:1rem;text-decoration:none;box-shadow:0 10px 28px rgba(0,0,0,.22);transition:all .25s}
-.lp-btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.32)}
-.lp-btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border:1.5px solid var(--lp-border);border-radius:999px;font-weight:500;font-size:.9375rem;color:var(--lp-text2);text-decoration:none;transition:all .25s}
-.lp-btn-secondary:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
-.lp-trust-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:560px}
-.lp-trust-row span{padding:6px 10px;border:1px solid var(--lp-border);border-radius:999px;background:var(--lp-surface2);color:var(--lp-text2);font-size:var(--lp-type-micro);font-weight:500;line-height:var(--lp-lh-snug)}
-.lp-terminal-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:560px;margin-top:14px}
-.lp-terminal-strip div{min-width:0;padding:9px 10px;border:1px solid var(--lp-border);border-radius:8px;background:rgba(255,255,255,.025)}
-.lp-terminal-strip span{display:block;font-size:.66rem;font-weight:600;text-transform:uppercase;color:var(--lp-muted);line-height:1.25}
-.lp-terminal-strip strong{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;font-weight:600;color:var(--lp-text)}
-.lp-hero-visual{position:relative}
-.lp-hero-card{background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:16px;overflow:hidden;box-shadow:0 24px 56px rgba(0,0,0,.32),0 0 0 1px rgba(214,223,232,.04)}
-:root[data-theme="light"] .lp-hero-card{box-shadow:0 20px 48px rgba(15,23,42,.1),0 0 0 1px rgba(15,23,42,.06)}
-.lp-card-bar{background:var(--lp-surface2);padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--lp-border)}
-.lp-dot{width:11px;height:11px;border-radius:50%}
-.lp-card-title{margin-left:8px;font-size:.72rem;font-weight:600;color:var(--lp-muted)}
-.lp-card-body{padding:16px}
-.lp-command-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
-.lp-command-strip div{min-width:0;padding:8px 9px;border:1px solid var(--lp-border);border-radius:8px;background:rgba(255,255,255,.025)}
-.lp-command-strip span{display:block;font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--lp-muted);line-height:1.2}
-.lp-command-strip strong{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-geist-mono),monospace;font-size:.72rem;font-weight:600;color:var(--lp-text)}
-.lp-col-header{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:6px 0;margin-bottom:4px}
-.lp-col-h{font-size:.72rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--lp-muted)}
-.lp-srow{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--lp-border);align-items:center;animation:lp-row-in .4s ease both}
-@keyframes lp-row-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
-.lp-workstation-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(132px,.65fr);gap:10px;margin-top:12px}
-.lp-mini-chart,.lp-flow-queue{min-width:0;border:1px solid var(--lp-border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));overflow:hidden}
-.lp-mini-chart-head,.lp-mini-chart-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;font-size:.68rem;color:var(--lp-muted)}
-.lp-mini-chart-head strong,.lp-mini-chart-foot span:last-child{font-family:var(--font-geist-mono),monospace;font-weight:600;color:var(--lp-text)}
-.lp-candle-board{position:relative;display:flex;align-items:flex-end;gap:7px;height:112px;padding:12px 12px 10px;background:linear-gradient(180deg,rgba(255,255,255,.018),transparent)}
-.lp-candle{position:relative;z-index:1;flex:1;min-width:5px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,var(--lp-green),rgba(45,181,116,.42));box-shadow:0 0 16px rgba(45,181,116,.12)}
-.lp-candle-down{background:linear-gradient(180deg,var(--lp-red),rgba(232,90,79,.42));box-shadow:0 0 16px rgba(232,90,79,.1)}
-.lp-level-line{position:absolute;left:10px;right:10px;height:1px;background:rgba(214,223,232,.22)}
-.lp-level-line-top{top:28px}.lp-level-line-mid{top:64px;background:rgba(245,158,11,.28)}
-.lp-flow-queue{padding:10px;display:grid;gap:8px}
-.lp-flow-head{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--lp-muted)}
-.lp-flow-row{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(255,255,255,.045);border-radius:8px;background:rgba(255,255,255,.02)}
-.lp-flow-dot{width:7px;height:7px;border-radius:999px;flex-shrink:0}
-.lp-flow-dot-hot{background:var(--lp-green);box-shadow:0 0 0 4px rgba(45,181,116,.1)}
-.lp-flow-dot-steady{background:var(--lp-accent);box-shadow:0 0 0 4px rgba(214,223,232,.08)}
-.lp-flow-dot-warn{background:var(--lp-yellow);box-shadow:0 0 0 4px rgba(245,158,11,.1)}
-.lp-flow-row span:not(.lp-flow-dot){display:block;font-size:.66rem;color:var(--lp-muted);line-height:1.2}
-.lp-flow-row strong{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-geist-mono),monospace;font-size:.76rem;color:var(--lp-text);font-weight:600}
-.lp-cockpit-panel{display:grid;gap:7px;margin-top:14px;padding:10px;border:1px solid var(--lp-border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015))}
-.lp-cockpit-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;line-height:1.35}
-.lp-cockpit-row span{color:var(--lp-muted)}
-.lp-cockpit-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--lp-text);font-weight:600;text-align:right}
+#lp-hero{padding:152px 0 88px;position:relative;border-bottom:1px solid var(--lp-border)}
+.lp-hero-inner{width:min(100%,1200px);margin:0 auto;padding:0 32px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:72px;align-items:center}
+.lp-hero-text,.lp-hero-visual{min-width:0}
+.lp-eyebrow{margin:0 0 22px;color:var(--lp-muted);font-size:.75rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase}
+.lp-h1{font-size:clamp(3rem,4.8vw,4.25rem);font-weight:600;line-height:1.06;letter-spacing:-.055em;margin:0 0 24px}
+.lp-h1-s1,.lp-h1-s2{display:block;color:var(--lp-text)}
+.lp-h1-s2{color:var(--lp-text2)}
+.lp-sub{font-size:1.0625rem;font-weight:400;color:var(--lp-text2);line-height:1.75;margin:0 0 30px;max-width:29rem}
+.lp-ctas{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.lp-btn-primary,.lp-btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:48px;padding:12px 22px;border-radius:10px;font-size:.875rem;font-weight:600;text-decoration:none;transition:background .2s,border-color .2s,transform .2s}
+.lp-btn-primary{background:var(--lp-accent);color:var(--text-on-accent);border:1px solid transparent;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.lp-btn-primary:hover{transform:translateY(-1px)}
+.lp-btn-secondary{border:1px solid var(--lp-border);color:var(--lp-text2);background:transparent}
+.lp-btn-secondary:hover{border-color:var(--lp-text2);color:var(--lp-text)}
+.lp-hero-note{font-size:.75rem;color:var(--lp-muted);margin:0;line-height:1.6}
+.lp-hero-card{border:1px solid var(--lp-border);border-radius:16px;overflow:hidden;background:var(--lp-surface);box-shadow:0 24px 64px rgba(0,0,0,.16)}
+.lp-preview-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--lp-border);background:var(--lp-surface2)}
+.lp-preview-brand{display:flex;align-items:center;gap:9px;font-size:.8125rem;font-weight:600;color:var(--lp-text)}
+.lp-preview-brand svg{width:22px;height:22px}
+.lp-preview-caption{font-size:.6875rem;color:var(--lp-muted)}
+.lp-card-body{padding:24px 22px 18px}
+.lp-preview-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.lp-preview-title h2{font-size:1rem;font-weight:600;letter-spacing:-.02em;margin:0;color:var(--lp-text)}
+.lp-preview-title p{font-size:.6875rem;color:var(--lp-muted);margin:4px 0 0}
+.lp-preview-state{font-size:.625rem;color:var(--lp-text2);border:1px solid var(--lp-border);padding:4px 7px;border-radius:5px;white-space:nowrap}
+.lp-preview-quotes{min-height:252px}
+.lp-preview-table{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;font-variant-numeric:tabular-nums}
+.lp-preview-table thead th{font-size:.625rem;color:var(--lp-muted);font-weight:500;padding:10px 0;border-bottom:1px solid var(--lp-border)}
+.lp-preview-table thead th:first-child{width:41%}
+.lp-preview-table thead th:nth-child(2){width:31%;text-align:right}
+.lp-preview-table thead th:last-child{width:28%;text-align:right}
+.lp-preview-table tbody th,.lp-preview-table td{height:54px;border-bottom:1px solid var(--lp-border);font-weight:500;font-size:.8125rem;color:var(--lp-text)}
+.lp-preview-table td{text-align:right;white-space:nowrap}
+.lp-preview-symbol{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-preview-exchange{display:block;font-size:.5625rem;font-weight:400;letter-spacing:.04em;color:var(--lp-muted);margin-top:2px}
+.lp-preview-gain,.lp-preview-loss{display:inline-block;border-radius:5px;padding:3px 6px;font-size:.75rem}
+.lp-preview-gain{color:var(--lp-green);background:var(--gain-subtle)}
+.lp-preview-loss{color:var(--lp-red);background:var(--loss-subtle)}
+.lp-preview-source{font-size:.625rem;color:var(--lp-muted);margin:14px 0 0;line-height:1.5}
+.lp-preview-message{min-height:252px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--lp-muted);font-size:.8125rem;padding:20px 10px}
+.lp-preview-message p{margin:0;max-width:240px}
+.lp-preview-message a{display:inline-flex;align-items:center;gap:8px;color:var(--lp-text2);font-size:.75rem;text-underline-offset:4px}
+.lp-preview-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--lp-border);padding:18px 22px;background:var(--lp-surface2)}
+.lp-preview-flow span{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.6875rem;font-weight:500;color:var(--lp-text2)}
+.lp-preview-flow span+span{border-left:1px solid var(--lp-border)}
 .lp-sym{font-size:var(--lp-type-small);font-weight:600;font-family:var(--font-geist-mono),monospace}
 .lp-sym-sub{font-size:.68rem;color:var(--lp-muted)}
 .lp-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600;letter-spacing:0}
@@ -1029,8 +939,9 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 	.lp-terminal-surface:hover{border-color:rgba(214,223,232,.22);box-shadow:0 20px 54px rgba(0,0,0,.3);transform:translateY(-2px)}
 	:root[data-theme="light"] .lp-terminal-surface:hover{border-color:rgba(15,23,42,.2);box-shadow:0 18px 44px rgba(15,23,42,.12)}
 @media(max-width:1024px){
-  .lp-hero-inner{grid-template-columns:1fr;gap:56px}
-  .lp-hero-visual{display:none}
+  .lp-hero-inner{grid-template-columns:1fr;gap:40px;max-width:720px}
+  .lp-hero-visual{display:block}
+  #lp-hero{padding:126px 0 64px}
   .lp-tab-panel.lp-tab-active{grid-template-columns:1fr}
   .lp-pgrid{grid-template-columns:1fr}
   .lp-tgrid{grid-template-columns:1fr}
@@ -1052,7 +963,17 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
   .lp-nav-mobile{display:none}
 }
 @media(max-width:640px){
-  .lp-h1{font-size:2.45rem}
+  .lp-h1{font-size:clamp(2.625rem,10vw,3.5rem)}
+  .lp-hero-inner{padding:0 22px;gap:36px}
+  .lp-sub{font-size:1rem;line-height:1.7}
+  .lp-ctas{gap:10px}
+  .lp-btn-primary,.lp-btn-secondary{padding:12px 16px;gap:8px}
+  .lp-preview-header{padding:16px}
+  .lp-card-body{padding:20px 16px 16px}
+  .lp-preview-flow{padding:16px 10px}
+  .lp-preview-flow span{gap:6px}
+  .lp-preview-table td,.lp-preview-table tbody th{font-size:.75rem}
+  .lp-preview-gain,.lp-preview-loss{font-size:.6875rem;padding:3px 4px}
   .lp-sec-title{font-size:1.8rem}
   .lp-final-title{font-size:2.2rem}
   .lp-tp-h{font-size:1.45rem}
@@ -1066,8 +987,8 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
   .lp-stat{border-right:none;border-top:1px solid var(--lp-border)}
   .lp-stat:first-child{border-top:none}
   .lp-tv{display:none}
-  .lp-terminal-strip{grid-template-columns:1fr}
   .lp-tab-panel.lp-tab-active{grid-template-columns:1fr}
   #lp-ticker{display:none}
 }
+@media(max-width:380px){.lp-ctas{align-items:stretch}.lp-ctas a{flex:1 0 100%}}
 `;

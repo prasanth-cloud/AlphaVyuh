@@ -26,6 +26,8 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.services.bhavcopy import (  # noqa: E402
     COL_MAP, NSE_HEADERS, VALID_SERIES, _safe_float, _safe_int,
+    _completed_ingest_rows, _has_52_week_history, _upsert_universe_from_bhavcopy,
+    _validate_source_trade_date,
 )
 from app.services.supabase import get_admin_client  # noqa: E402
 
@@ -68,7 +70,7 @@ def _trading_days(days_back: int, *, start_date: date | None = None, end_date: d
     return result
 
 
-def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame | None:
+def _download_csv(trade_date: date, session: requests.Session) -> tuple[pd.DataFrame, int] | None:
     date_str = trade_date.strftime("%d%m%Y")
     url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
     try:
@@ -86,9 +88,13 @@ def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame |
         required = {"symbol", "series", "open", "high", "low", "close", "volume"}
         if not required.issubset(df.columns):
             return None
+        _validate_source_trade_date(df, trade_date)
         df["series"] = df["series"].str.strip().str.upper()
         df = df[df["series"].isin(VALID_SERIES)].copy()
         df["symbol"] = df["symbol"].str.strip().str.upper()
+        expected_rows = int(df["symbol"].nunique())
+        if expected_rows == 0:
+            raise ValueError("Source contains no supported symbols.")
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         df = df.dropna(subset=["open", "high", "low", "close", "volume"])
@@ -101,23 +107,14 @@ def _download_csv(trade_date: date, session: requests.Session) -> pd.DataFrame |
         else:
             df["turnover"] = pd.to_numeric(df["turnover"], errors="coerce")
         df["trade_date"] = str(trade_date)
-        return df
+        return df, expected_rows
     except Exception as e:
         print(f"  download error {trade_date}: {e}")
         return None
 
 
 def _upsert_universe(client, df: pd.DataFrame):
-    rows = df[["symbol", "series"]].drop_duplicates("symbol").copy()
-    if "company_name" in df.columns:
-        rows = df[["symbol", "company_name", "series"]].drop_duplicates("symbol").copy()
-    else:
-        rows["company_name"] = rows["symbol"]
-    rows["isin"] = None
-    rows["is_active"] = True
-    data = rows.to_dict("records")
-    for i in range(0, len(data), 500):
-        _execute(client.table("stock_universe").upsert(data[i:i+500], on_conflict="symbol"), "stock_universe upsert")
+    _upsert_universe_from_bhavcopy(client, df)
 
 
 def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date, active_symbols: set[str] | None = None):
@@ -235,19 +232,25 @@ def _compute_and_update_indicators(client):
             try:
                 grp = grp.tail(252).reset_index(drop=True)
                 n = len(grp)
-                if n < 2:
-                    continue
-
                 close_s = grp["close"]
                 high_s  = grp["high"]
                 low_s   = grp["low"]
                 vol_s   = grp["volume"]
 
                 ind: dict = {}
-                ind["prev_close"]     = _safe_float(close_s.iloc[-2])
-                ind["week_52_high"]   = _safe_float(high_s.max())
-                ind["week_52_low"]    = _safe_float(low_s.min())
-                ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean())
+                if n >= 2:
+                    ind["prev_close"] = _safe_float(close_s.iloc[-2])
+                ind.update({"week_52_high": None, "week_52_low": None, "w52h_pct": None,
+                            "w52l_pct": None, "is_new_52w_high": None, "is_new_52w_low": None})
+                if _has_52_week_history(high_s, low_s):
+                    ind["week_52_high"] = _safe_float(high_s.max())
+                    ind["week_52_low"] = _safe_float(low_s.min())
+                    latest_close = _safe_float(close_s.iloc[-1])
+                    if latest_close and latest_close > 0 and ind["week_52_high"] is not None:
+                        ind["w52h_pct"] = round((ind["week_52_high"] - latest_close) / latest_close * 100, 4)
+                    if latest_close is not None and ind["week_52_low"] and ind["week_52_low"] > 0:
+                        ind["w52l_pct"] = round((latest_close - ind["week_52_low"]) / ind["week_52_low"] * 100, 4)
+                ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean()) if n >= 2 else None
                 latest_high = _safe_float(high_s.iloc[-1])
                 latest_low = _safe_float(low_s.iloc[-1])
                 if ind["week_52_high"] is not None and latest_high is not None:
@@ -310,33 +313,41 @@ async def backfill(
 
         success = skipped = failed = 0
         for d in days:
+            source_url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{d.strftime('%d%m%Y')}.csv"
             # Check already ingested
             existing = _execute(
                 client.table("bhavcopy_ingestion_log")
-                .select("status").eq("trade_date", str(d)),
+                .select("status,partial_ingest,expected_rows,rows_ingested,source_url").eq("trade_date", str(d)),
                 "bhavcopy_ingestion_log fetch",
             )
-            if existing.data and existing.data[0]["status"] == "success":
+            if existing.data and _completed_ingest_rows(client, existing.data[0], d, source_url) is not None:
                 print(f"  skip {d} (done)")
                 skipped += 1
                 continue
 
-            df = _download_csv(d, session)
-            if df is None:
+            downloaded = _download_csv(d, session)
+            if downloaded is None:
                 print(f"  skip {d} (no data / holiday)")
                 skipped += 1
                 continue
+            df, expected_rows = downloaded
 
             try:
                 if update_universe:
                     _upsert_universe(client, df)
+                    active_symbols.update(df["symbol"].tolist())
                 n = _upsert_ohlcv(client, df, d, active_symbols=active_symbols)
                 if n == 0:
                     print(f"  skip {d} (no rows match active universe)")
                     skipped += 1
                     continue
+                partial_ingest = n < expected_rows
                 _execute(client.table("bhavcopy_ingestion_log").upsert({
-                    "trade_date": str(d), "status": "success", "rows_ingested": n,
+                    "trade_date": str(d), "status": "partial" if partial_ingest else "success", "rows_ingested": n,
+                    "expected_rows": expected_rows, "coverage_pct": round(n / expected_rows * 100, 2),
+                    "partial_ingest": partial_ingest, "source_name": "NSE bhavcopy",
+                    "source_url": source_url,
+                    "error_message": None,
                 }), "bhavcopy_ingestion_log success upsert")
                 print(f"  ✓ {d}: {n} rows")
                 success += 1

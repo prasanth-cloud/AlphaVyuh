@@ -7,7 +7,7 @@ import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry } from "./types";
-import { fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
+import { fmtCcy, fmtDate, getTradeFlowMeta, getTradeOutcomeCaption } from "./utils";
 
 interface TradeTableProps {
   entries: JournalEntry[];
@@ -34,7 +34,7 @@ const JOURNAL_TABLE_HEADERS = [
   { label: "Setup", className: "" },
   { label: "Dates", className: "journal-table-secondary" },
   { label: "Entry / Exit", className: "journal-table-secondary" },
-  { label: "P&L / R", className: "journal-table-mobile-hide" },
+  { label: "P&L", className: "journal-table-mobile-hide" },
   { label: "Review", className: "journal-table-mobile-hide" },
   { label: "Source", className: "journal-table-mobile-hide" },
   { label: "", className: "journal-table-mobile-hide" },
@@ -158,11 +158,7 @@ export function TradeTable({
             ) : (
               entries.map(e => {
                 const flow = getTradeFlowMeta(e);
-                const rMultiple = e.risk_reward ?? (
-                  e.pnl != null && e.stop_loss != null && e.entry_price !== e.stop_loss && e.quantity > 0
-                    ? e.pnl / (Math.abs(e.entry_price - e.stop_loss) * e.quantity)
-                    : null
-                );
+                const outcomeCaption = getTradeOutcomeCaption(e);
                 const outcomeClass = e.status === "closed" && e.pnl != null
                   ? e.pnl >= 0
                     ? "journal-row-win"
@@ -193,16 +189,16 @@ export function TradeTable({
                     <div className="journal-mobile-trade-card">
                       <div className="journal-mobile-trade-grid">
                         <div>
-                          <div className="label">P&L / R</div>
+                          <div className="label">P&L</div>
                           {e.pnl == null ? (
-                            <div className="caption">Open trade</div>
+                            <div className="caption">{e.status === "closed" ? "P&L unavailable" : outcomeCaption}</div>
                           ) : (
                             <>
                               <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
                                 {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
                               </div>
                               <div className="caption">
-                                {rMultiple != null ? `${rMultiple >= 0 ? "+" : ""}${rMultiple.toFixed(2)}R` : e.pnl_pct != null ? `${e.pnl_pct >= 0 ? "+" : ""}${e.pnl_pct.toFixed(2)}%` : "R pending"}
+                                {outcomeCaption}
                               </div>
                             </>
                           )}
@@ -250,14 +246,14 @@ export function TradeTable({
                   </td>
                   <td className="journal-table-mobile-hide" style={{ padding: "8px 10px" }}>
                     {e.pnl == null ? (
-                      <span className="caption">Open</span>
+                      <span className="caption">{e.status === "closed" ? "P&L unavailable" : outcomeCaption}</span>
                     ) : (
                       <div style={{ display: "grid", gap: 3 }}>
                         <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
                           {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
                         </span>
                         <span className="caption">
-                          {rMultiple != null ? `${rMultiple >= 0 ? "+" : ""}${rMultiple.toFixed(2)}R` : e.pnl_pct != null ? `${e.pnl_pct >= 0 ? "+" : ""}${e.pnl_pct.toFixed(2)}%` : "R pending"}
+                          {outcomeCaption}
                         </span>
                       </div>
                     )}

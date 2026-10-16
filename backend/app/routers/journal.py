@@ -1,5 +1,7 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from math import isfinite
 from typing import Any, Literal, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import yfinance as yf
@@ -86,26 +88,207 @@ def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def _journal_today() -> date:
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date()
+
+
+def _analytics_number(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if isfinite(number) else None
+
+
+def _analytics_date(value: Any) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == value else None
+
+
+def _analytics_holding_days(row: dict) -> int | None:
+    entry_date = _analytics_date(row.get("entry_date"))
+    exit_date = _analytics_date(row.get("exit_date"))
+    if entry_date is None or exit_date is None or entry_date > exit_date:
+        return None
+    # Calendar dates are authoritative; stored holding_days can be stale after edits.
+    return (exit_date - entry_date).days
+
+
+def _closed_analytics_entries(client, user_id: str) -> list[dict]:
+    entries: list[dict] = []
+    seen_ids: set[str] = set()
+    expected_count: int | None = None
+    while True:
+        result = (
+            client.table("trade_journal")
+            .select("id,symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward", count="exact")
+            .eq("user_id", user_id)
+            .eq("status", "closed")
+            .order("exit_date", desc=False)
+            .order("id", desc=False)
+            .range(len(entries), len(entries) + 999)
+            .execute()
+        )
+        chunk = result.data
+        if not isinstance(chunk, list):
+            raise ValueError("Invalid journal response")
+        count = getattr(result, "count", None)
+        if isinstance(count, int) and not isinstance(count, bool):
+            if expected_count is not None and count != expected_count:
+                raise ValueError("Journal history changed while loading")
+            expected_count = count
+        if not chunk:
+            if expected_count is not None and len(entries) != expected_count:
+                raise ValueError("Incomplete journal history")
+            return entries
+        for row in chunk:
+            trade_id = row.get("id") if isinstance(row, dict) else None
+            if not isinstance(trade_id, str) or not trade_id or trade_id in seen_ids:
+                raise ValueError("Journal history changed while loading")
+            seen_ids.add(trade_id)
+        entries.extend(chunk)
+        if expected_count is not None and len(entries) >= expected_count:
+            if len(entries) != expected_count:
+                raise ValueError("Unexpected journal row count")
+            return entries
+
+
+def _trade_metrics(entries: list[dict], *, closed_trades: int | None = None) -> dict:
+    returns = [value for row in entries if (value := _analytics_number(row.get("pnl_pct"))) is not None]
+    cash = [value for row in entries if (value := _analytics_number(row.get("pnl"))) is not None]
+    gains = [value for value in returns if value > 0]
+    losses = [-value for value in returns if value < 0]
+    cash_wins = [value for value in cash if value > 0]
+    cash_losses = [-value for value in cash if value < 0]
+
+    def rounded(value: float | None) -> float | None:
+        return round(value, 4) if value is not None and isfinite(value) else None
+
+    def average(values: list[float]) -> float | None:
+        return sum(value / len(values) for value in values) if values else None
+
+    winner_holding: list[float] = []
+    loser_holding: list[float] = []
+    for row in entries:
+        duration = _analytics_holding_days(row)
+        pnl_pct = _analytics_number(row.get("pnl_pct"))
+        if duration is None or pnl_pct is None:
+            continue
+        if pnl_pct > 0:
+            winner_holding.append(duration)
+        elif pnl_pct < 0:
+            loser_holding.append(duration)
+
+    avg_gain = average(gains)
+    avg_loss = average(losses)
+    win_probability = len(gains) / len(returns) if returns else None
+    loss_probability = len(losses) / len(returns) if returns else None
+    payoff = avg_gain / avg_loss if avg_gain is not None and avg_loss else None
+    adjusted = (
+        avg_gain * win_probability / (avg_loss * loss_probability)
+        if avg_gain is not None and avg_loss and win_probability is not None and loss_probability
+        else None
+    )
+    return {
+        "closed_trades": len(entries) if closed_trades is None else closed_trades,
+        "eligible_trades": len(entries),
+        "return_trade_count": len(returns),
+        "cash_trade_count": len(cash),
+        "wins": len(gains),
+        "losses": len(losses),
+        "breakevens": sum(value == 0 for value in returns),
+        "win_rate_pct": rounded(win_probability * 100) if win_probability is not None else None,
+        "loss_rate_pct": rounded(loss_probability * 100) if loss_probability is not None else None,
+        "avg_gain_pct": rounded(avg_gain),
+        "avg_loss_pct": rounded(avg_loss),
+        "largest_gain_pct": rounded(max(gains)) if gains else None,
+        "largest_loss_pct": rounded(max(losses)) if losses else None,
+        "avg_win_cash": rounded(average(cash_wins)),
+        "avg_loss_cash": rounded(average(cash_losses)),
+        "expectancy_pct": rounded(average(returns)),
+        "expectancy_cash": rounded(average(cash)),
+        "profit_factor_cash": rounded(sum(cash_wins) / sum(cash_losses)) if cash_losses else None,
+        "payoff_ratio": rounded(payoff),
+        "adjusted_win_loss_ratio": rounded(adjusted),
+        "avg_winner_holding_days": rounded(average(winner_holding)),
+        "avg_loser_holding_days": rounded(average(loser_holding)),
+        "winner_holding_count": len(winner_holding),
+        "loser_holding_count": len(loser_holding),
+    }
+
+
+def _performance_analytics(entries: list[dict], today: date) -> dict:
+    eligible: list[dict] = []
+    months: dict[str, list[dict]] = {}
+    unknown_dates = 0
+    future_dates = 0
+    for row in entries:
+        exit_date = _analytics_date(row.get("exit_date"))
+        if exit_date is None:
+            unknown_dates += 1
+            continue
+        if exit_date > today:
+            future_dates += 1
+            continue
+        eligible.append(row)
+        months.setdefault(exit_date.strftime("%Y-%m"), []).append(row)
+    metrics = _trade_metrics(eligible, closed_trades=len(entries))
+    returns = [value for row in eligible if (value := _analytics_number(row.get("pnl_pct"))) is not None]
+    missing_returns = len(eligible) - len(returns)
+    return {
+        "trading_edge": metrics,
+        "monthly_tracker": [{"month": month, **_trade_metrics(rows)} for month, rows in sorted(months.items())],
+        "trade_distribution": {
+            "returns_pct": returns,
+            "gain_count": metrics["wins"],
+            "loss_count": metrics["losses"],
+            "breakeven_count": metrics["breakevens"],
+            "missing_return_count": missing_returns,
+        },
+        "metric_coverage": {
+            "closed_trades": len(entries),
+            "eligible_trades": len(eligible),
+            "return_trade_count": len(returns),
+            "cash_trade_count": metrics["cash_trade_count"],
+            "unknown_exit_date_count": unknown_dates,
+            "future_exit_date_count": future_dates,
+            "missing_return_count": missing_returns,
+            "missing_cash_pnl_count": len(eligible) - metrics["cash_trade_count"],
+        },
+    }
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/analytics")
 async def get_analytics(user_id: str = Depends(get_current_user_id)):
     try:
         sb = get_admin_client()
-        result = (
-            sb.table("trade_journal")
-            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
-            .eq("user_id", user_id)
-            .eq("status", "closed")
-            .order("exit_date", desc=False)
-            .execute()
-        )
+        all_entries = _closed_analytics_entries(sb, user_id)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Journal analytics are temporarily unavailable.",
         )
-    entries = result.data or []
+    today = _journal_today()
+    performance = _performance_analytics(all_entries, today)
+    entries = []
+    for entry in all_entries:
+        exit_date = _analytics_date(entry.get("exit_date"))
+        if exit_date is not None and exit_date > today:
+            continue
+        normalized = dict(entry)
+        for field in ("pnl", "pnl_pct", "holding_days", "risk_reward"):
+            normalized[field] = _analytics_number(entry.get(field))
+        normalized["holding_days"] = _analytics_holding_days(entry)
+        entries.append(normalized)
 
     # ── Equity curve ─────────────────────────────────────────────────────────
     equity_curve = []
@@ -151,9 +334,10 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
     # ── Monthly P&L ───────────────────────────────────────────────────────────
     month_map: dict = {}
     for e in entries:
-        if not e.get("exit_date") or e.get("pnl") is None:
+        exit_date = _analytics_date(e.get("exit_date"))
+        if exit_date is None or e.get("pnl") is None:
             continue
-        month = e["exit_date"][:7]
+        month = exit_date.strftime("%Y-%m")
         month_map[month] = round(month_map.get(month, 0.0) + float(e["pnl"]), 2)
     monthly_pnl = [{"month": k, "pnl": v} for k, v in sorted(month_map.items())]
 
@@ -162,48 +346,35 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
     max_dd = 0.0
     peak = 0.0
     longest_dd_days = 0
-    current_dd_start: str | None = None
+    current_dd_start: date | None = None
 
     for pt in equity_curve:
         val = pt["cumulative_pnl"]
-        if val > peak:
-            peak = val
-            current_dd_start = None
+        peak = max(peak, val)
         dd = peak - val
-        dd_pct = (dd / abs(peak) * 100) if peak != 0 else 0.0
+
+        try:
+            point_date = date.fromisoformat(pt["date"])
+        except (TypeError, ValueError):
+            point_date = None
+
+        # Measure observed underwater periods through recovery or the latest
+        # closed trade, using each point's running high rather than the final high.
         if dd > 0 and current_dd_start is None:
-            current_dd_start = pt["date"]
-        if dd > max_dd:
-            max_dd = dd
+            current_dd_start = point_date
+        if current_dd_start is not None and point_date is not None:
+            longest_dd_days = max(longest_dd_days, (point_date - current_dd_start).days)
+        if dd == 0:
+            current_dd_start = None
+
+        max_dd = max(max_dd, dd)
         drawdown_curve.append({
             "date": pt["date"],
             "drawdown": -round(dd, 2),
-            "drawdown_pct": -round(dd_pct, 2),
+            # Cumulative P&L is not account equity; percentage drawdown needs an
+            # equity baseline and cash-flow history that this journal does not have.
+            "drawdown_pct": None,
         })
-
-    if len(equity_curve) >= 2:
-        from datetime import date as date_
-        in_dd = False
-        dd_start_dt = None
-        for pt in equity_curve:
-            val = pt["cumulative_pnl"]
-            if val < peak:
-                if not in_dd:
-                    in_dd = True
-                    try:
-                        dd_start_dt = date_.fromisoformat(pt["date"])
-                    except Exception:
-                        dd_start_dt = None
-            else:
-                if in_dd and dd_start_dt:
-                    try:
-                        end_dt = date_.fromisoformat(pt["date"])
-                        span = (end_dt - dd_start_dt).days
-                        longest_dd_days = max(longest_dd_days, span)
-                    except Exception:
-                        pass
-                in_dd = False
-                dd_start_dt = None
 
     total_pnl = equity_curve[-1]["cumulative_pnl"] if equity_curve else 0.0
     recovery_factor = round(total_pnl / max_dd, 2) if max_dd > 0 else None
@@ -220,6 +391,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         "longest_dd_days": longest_dd_days,
         "recovery_factor": recovery_factor,
         "profit_factor":   profit_factor,
+        **performance,
     }
 
 

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './api-base'
+import { parseJournalAnalytics } from './journal-analytics'
 import {
   mockCandles,
   mockIndicators,
@@ -1445,10 +1446,10 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
     if (!res.ok) {
       throw new Error(await responseErrorMessage(res, `Journal analytics are temporarily unavailable (${res.status}).`));
     }
-    const data = await res.json();
+    const data: unknown = await res.json();
     const unavailableMessage = unavailablePayloadMessage(data, "Journal analytics are temporarily unavailable.");
     if (unavailableMessage) throw new Error(unavailableMessage);
-    return data;
+    return parseJournalAnalytics(data);
   });
 }
 

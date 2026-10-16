@@ -3,15 +3,18 @@ Daily watchlist email digest — runs at 18:30 IST via APScheduler.
 
 Fetches each opted-in user's watchlist, joins latest EOD data,
 checks for scanner triggers, and sends a summary email via Resend.
-Skips weekends and market holidays (detected via bhavcopy_log).
+Sends only after the current IST session has a complete bhavcopy ingest.
 """
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+import os
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import resend
 
+from app.services.bhavcopy import _completed_ingest_rows
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -20,16 +23,18 @@ RESEND_FROM = "AlphaVyuh <digest@alphavyuh.com>"
 
 
 def _is_trading_day(client, target: date) -> bool:
-    """Check bhavcopy_log to see if today had a successful ingest (= trading day)."""
+    """Require a complete current-session receipt backed by stored EOD rows."""
     if target.weekday() >= 5:
         return False
-    result = client.table("bhavcopy_log") \
-        .select("status") \
+    result = client.table("bhavcopy_ingestion_log") \
+        .select("status,rows_ingested,expected_rows,partial_ingest,source_url") \
         .eq("trade_date", str(target)) \
-        .in_("status", ["success", "already_done"]) \
         .limit(1) \
         .execute()
-    return bool(result.data)
+    if not result.data:
+        return False
+    source_url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{target.strftime('%d%m%Y')}.csv"
+    return _completed_ingest_rows(client, result.data[0], target, source_url) is not None
 
 
 def _get_or_create_unsubscribe_token(client, user_id: str) -> str:
@@ -119,17 +124,18 @@ def _detect_triggers(row: dict) -> list[str]:
 
 async def send_daily_digests():
     """Main entry point — called by APScheduler at 18:30 IST."""
-    if not settings.resend_api_key:
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    if not resend_key:
         logger.info("Email digest skipped: RESEND_API_KEY not configured")
         return {"status": "skipped", "reason": "no_resend_key"}
 
-    resend.api_key = settings.resend_api_key
+    resend.api_key = resend_key
     client = get_admin_client()
-    today = date.today()
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
     if not _is_trading_day(client, today):
-        logger.info("Email digest skipped: %s is not a trading day", today)
-        return {"status": "skipped", "reason": "not_trading_day"}
+        logger.info("Email digest skipped: no complete EOD ingest for %s", today)
+        return {"status": "skipped", "reason": "no_complete_eod"}
 
     users_res = client.table("users") \
         .select("id, email, full_name, email_digest_enabled") \

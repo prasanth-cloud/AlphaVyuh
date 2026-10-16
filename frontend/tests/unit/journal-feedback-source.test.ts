@@ -38,7 +38,7 @@ describe("journal feedback copy", () => {
   it("keeps mobile journal rows actionable without horizontal table hunting", () => {
     expect(tradeTableSource).toContain("journal-mobile-trade-card");
     expect(tradeTableSource).toContain("journal-mobile-trade-grid");
-    expect(tradeTableSource).toContain("P&L / R");
+    expect(tradeTableSource).toContain("P&L");
     expect(tradeTableSource).toContain("Source");
     expect(tradeTableSource).toContain("Review");
     expect(globalStyles).toContain(".journal-table-mobile-hide");

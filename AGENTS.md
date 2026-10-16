@@ -35,6 +35,11 @@ See `/Users/PRASAANTH/alphavyuh/docs/agent-roles.md` for detailed responsibiliti
 
 ## Required Workflow
 
+Follow [the pstack-informed development workflow](docs/development-workflow.md)
+for nontrivial changes. Use `scripts/check-analytics-recovery.sh` to collect local
+analytics/auth evidence; `FAIL` and `NOT_RUN` never establish release readiness.
+The existing approval matrix and secret-handling rules remain authoritative.
+
 1. Convert the founder goal into a feature spec.
 2. Split the spec into agent tasks with owner, scope, risk, and acceptance criteria.
 3. Create or update GitHub issues for trackable work.

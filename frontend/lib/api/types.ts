@@ -554,6 +554,52 @@ export type UpdateJournalEntry = {
   status?: string;
 };
 
+export type JournalTradeMetrics = {
+  closed_trades: number;
+  eligible_trades: number;
+  return_trade_count: number;
+  cash_trade_count: number;
+  wins: number;
+  losses: number;
+  breakevens: number;
+  win_rate_pct: number | null;
+  loss_rate_pct: number | null;
+  avg_gain_pct: number | null;
+  avg_loss_pct: number | null;
+  largest_gain_pct: number | null;
+  largest_loss_pct: number | null;
+  avg_win_cash: number | null;
+  avg_loss_cash: number | null;
+  expectancy_pct: number | null;
+  expectancy_cash: number | null;
+  profit_factor_cash?: number | null;
+  payoff_ratio: number | null;
+  adjusted_win_loss_ratio: number | null;
+  avg_winner_holding_days: number | null;
+  avg_loser_holding_days: number | null;
+  winner_holding_count: number;
+  loser_holding_count: number;
+};
+
+export type JournalMetricCoverage = {
+  closed_trades: number;
+  eligible_trades: number;
+  return_trade_count: number;
+  cash_trade_count: number;
+  unknown_exit_date_count: number;
+  future_exit_date_count: number;
+  missing_return_count: number;
+  missing_cash_pnl_count: number;
+};
+
+export type JournalTradeDistribution = {
+  returns_pct: number[];
+  gain_count: number;
+  loss_count: number;
+  breakeven_count: number;
+  missing_return_count: number;
+};
+
 export type JournalAnalytics = {
   equity_curve: { date: string; cumulative_pnl: number }[];
   setup_breakdown: {
@@ -567,11 +613,15 @@ export type JournalAnalytics = {
     avg_risk_reward?: number | null;
   }[];
   monthly_pnl: { month: string; pnl: number }[];
-  drawdown_curve: { date: string; drawdown: number; drawdown_pct: number }[];
+  drawdown_curve: { date: string; drawdown: number; drawdown_pct: number | null }[];
   max_drawdown: number | null;
   longest_dd_days: number;
   recovery_factor: number | null;
   profit_factor: number | null;
+  trading_edge?: JournalTradeMetrics | null;
+  monthly_tracker?: (JournalTradeMetrics & { month: string })[];
+  trade_distribution?: JournalTradeDistribution | null;
+  metric_coverage?: JournalMetricCoverage | null;
 };
 
 export type Fundamentals = {

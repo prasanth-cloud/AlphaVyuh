@@ -1,46 +1,46 @@
 import { NextResponse } from "next/server";
-import { getSafeAuthErrorMessage } from "@/lib/auth-error-copy";
+import { AUTH_SERVICE_UNAVAILABLE_MESSAGE, getAuthErrorStatus, getSafeAuthErrorMessage, isNeutralAuthResendError } from "@/lib/auth-error-copy";
+import { normalizeAuthEmail, readAuthRequestBody } from "@/lib/auth-request";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { getAuthRedirectOrigin } from "@/lib/auth-redirect-origin";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
-  const { email, next } = await request.json();
-  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-
-  if (!normalizedEmail || !normalizedEmail.includes("@")) {
+  const body = await readAuthRequestBody(request);
+  const email = normalizeAuthEmail(body?.email);
+  if (!email) {
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
 
   const requestUrl = new URL(request.url);
+  const next = typeof body?.next === "string" ? body.next : null;
   const safeNext = isSafeRedirect(next) ? next : "/dashboard";
   const emailRedirectTo = `${getAuthRedirectOrigin(requestUrl.origin)}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const response = NextResponse.json({ success: true });
-  const supabase = await createRouteHandlerClient(response);
+  try {
+    const supabase = await createRouteHandlerClient(response);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo },
+    });
 
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email: normalizedEmail,
-    options: { emailRedirectTo },
-  });
-
-  if (error) {
-    const message = error.message.toLowerCase();
-    if (message.includes("rate") || message.includes("limit")) {
+    if (error) {
+      const status = getAuthErrorStatus(error, 400);
+      if (status === 400 && isNeutralAuthResendError(error)) {
+        return NextResponse.json({ success: true });
+      }
       return NextResponse.json(
-        { error: "Please wait a minute before requesting another link." },
-        { status: 429 },
+        { error: getSafeAuthErrorMessage(error, "Could not resend confirmation email.") },
+        { status },
       );
     }
-    if (message.includes("already") || message.includes("confirmed") || message.includes("not found")) {
-      return NextResponse.json({ success: true });
-    }
+    return response;
+  } catch (error) {
     return NextResponse.json(
-      { error: getSafeAuthErrorMessage(error, "Could not resend confirmation email.") },
-      { status: 400 },
+      { error: getSafeAuthErrorMessage(error, AUTH_SERVICE_UNAVAILABLE_MESSAGE) },
+      { status: getAuthErrorStatus(error, 503) }
     );
   }
-
-  return response;
 }

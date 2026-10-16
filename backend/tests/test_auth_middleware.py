@@ -89,5 +89,78 @@ def test_get_current_user_id_hides_provider_errors(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(auth._validate_token(_credentials("opaque-token")))
 
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Authentication service is temporarily unavailable"
+
+
+@pytest.mark.parametrize(
+    "provider_status,code,message,expected_status",
+    [
+        (400, "bad_jwt", "Invalid JWT", 401),
+        (401, "bad_jwt", "JWT expired", 401),
+        (403, "user_banned", "User is banned", 401),
+        (401, "", "Invalid API key", 503),
+        (401, "invalid_api_key", "Provider rejected application configuration", 503),
+        (403, "", "Service restricted: exceed_db_size_quota", 503),
+        (500, "unexpected_failure", "Secret database detail", 503),
+        (400, "unexpected_failure", "Secret database detail", 503),
+        (408, "request_timeout", "Request timed out", 503),
+        (400, "request_timeout", "Request timed out", 503),
+        (429, "over_request_rate_limit", "Secret provider detail", 429),
+        (400, "over_request_rate_limit", "Secret provider detail", 429),
+    ],
+)
+def test_auth_provider_errors_preserve_credential_and_outage_semantics(
+    monkeypatch, provider_status, code, message, expected_status
+):
+    class ProviderError(Exception):
+        status = provider_status
+
+        def __init__(self):
+            super().__init__(message)
+            self.code = code
+
+    class FakeAuth:
+        def get_user(self, token):
+            raise ProviderError()
+
+    monkeypatch.setattr(auth.settings, "supabase_jwt_secret", "")
+    monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=FakeAuth()))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth._validate_token(_credentials("opaque-token")))
+
+    assert exc.value.status_code == expected_status
+    assert message not in exc.value.detail
+    if expected_status == 503:
+        assert exc.value.detail == "Authentication service is temporarily unavailable"
+    elif expected_status == 429:
+        assert exc.value.detail == "Please wait before trying again"
+    else:
+        assert exc.value.detail == "Authentication failed"
+
+
+def test_auth_client_initialization_failure_is_not_an_invalid_token(monkeypatch):
+    def unavailable_client():
+        raise RuntimeError("secret configuration detail")
+
+    monkeypatch.setattr(auth.settings, "supabase_jwt_secret", "")
+    monkeypatch.setattr(auth, "get_admin_client", unavailable_client)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth._validate_token(_credentials("opaque-token")))
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Authentication service is temporarily unavailable"
+
+
+def test_auth_provider_missing_user_remains_unauthorized(monkeypatch):
+    fake_auth = SimpleNamespace(get_user=lambda _token: SimpleNamespace(user=None))
+    monkeypatch.setattr(auth.settings, "supabase_jwt_secret", "")
+    monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=fake_auth))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth._validate_token(_credentials("opaque-token")))
+
     assert exc.value.status_code == 401
-    assert exc.value.detail == "Authentication failed"
+    assert exc.value.detail == "Invalid token"

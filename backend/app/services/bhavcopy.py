@@ -86,23 +86,54 @@ def _upsert_ingest_log(client, payload: dict) -> None:
         ).execute()
 
 
-def _expected_active_rows(client, series: set[str] = VALID_SERIES) -> int | None:
-    try:
-        result = (
-            client.table("stock_universe")
-            .select("symbol", count="exact")
-            .eq("is_active", True)
-            .in_("series", sorted(series))
-            .execute()
-        )
-        return result.count
-    except Exception:
+def _validate_source_trade_date(df: pd.DataFrame, trade_date: date) -> None:
+    if "trade_date_col" not in df.columns:
+        raise ValueError("Missing source trade date column.")
+    dates = pd.to_datetime(df["trade_date_col"].astype(str).str.strip(), format="mixed", errors="coerce", dayfirst=True).dt.date
+    if dates.empty or dates.isna().any() or (dates != trade_date).any():
+        raise ValueError(f"Source trade date does not match requested {trade_date}.")
+
+
+def _upsert_universe_from_bhavcopy(client, df: pd.DataFrame) -> None:
+    records = df.drop_duplicates("symbol").to_dict("records")
+    for offset in range(0, len(records), 100):
+        batch = records[offset:offset + 100]
+        existing = client.table("stock_universe").select("symbol,company_name,isin") \
+            .in_("symbol", [row["symbol"] for row in batch]).execute().data or []
+        known = {row["symbol"]: row for row in existing}
+        payload = []
+        for row in batch:
+            previous = known.get(row["symbol"], {})
+            name = row.get("company_name")
+            isin = row.get("isin")
+            payload.append({
+                "symbol": row["symbol"],
+                "series": row["series"],
+                "company_name": name.strip() if isinstance(name, str) and name.strip() else previous.get("company_name") or row["symbol"],
+                "isin": isin.strip() if isinstance(isin, str) and isin.strip() else previous.get("isin"),
+                "is_active": True,
+            })
+        client.table("stock_universe").upsert(payload, on_conflict="symbol").execute()
+
+
+def _completed_ingest_rows(client, receipt: dict, trade_date: date, source_url: str) -> int | None:
+    rows = _safe_int(receipt.get("rows_ingested")) or 0
+    expected = _safe_int(receipt.get("expected_rows")) or 0
+    if receipt.get("status") != "success" or receipt.get("partial_ingest") is not False \
+            or receipt.get("source_url") != source_url or expected <= 0 or rows < expected:
         return None
+    stored = client.table("daily_ohlcv").select("symbol", count="exact") \
+        .eq("trade_date", str(trade_date)).execute().count
+    return rows if stored is not None and stored >= rows else None
+
+
+def _has_52_week_history(highs: pd.Series, lows: pd.Series) -> bool:
+    return len(highs) >= 252 and bool(np.isfinite(highs).all() and np.isfinite(lows).all())
 
 
 def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> list[tuple]:
     """
-    Fetch last 252 rows for all symbols in a single paginated query,
+    Fetch history through trade_date for all symbols in paginated queries,
     compute indicators in pandas, return list of (symbol, indicators_dict).
     Far faster than one query per symbol.
     """
@@ -119,6 +150,7 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
             chunk = client.table("daily_ohlcv") \
                 .select("symbol, trade_date, open, high, low, close, volume") \
                 .in_("symbol", sym_batch) \
+                .lte("trade_date", trade_date.isoformat()) \
                 .order("trade_date", desc=False) \
                 .range(offset, offset + 999) \
                 .execute()
@@ -139,8 +171,6 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
     hdf.sort_values(["symbol", "trade_date"], inplace=True)
 
     results = []
-    today_str = str(trade_date)
-
     for symbol, grp in hdf.groupby("symbol", sort=False):
         grp = grp.tail(252).reset_index(drop=True)
         n = len(grp)
@@ -169,8 +199,11 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
             if avg_vol_20 and avg_vol_20 > 0 and cur_vol is not None:
                 ind["volume_ratio"] = round(cur_vol / avg_vol_20, 4)
 
-        ind["week_52_high"] = _safe_float(high_s.max())
-        ind["week_52_low"]  = _safe_float(low_s.min())
+        ind.update({"week_52_high": None, "week_52_low": None, "w52h_pct": None,
+                    "w52l_pct": None, "is_new_52w_high": None, "is_new_52w_low": None})
+        if _has_52_week_history(high_s, low_s):
+            ind["week_52_high"] = _safe_float(high_s.max())
+            ind["week_52_low"] = _safe_float(low_s.min())
         ind["high_3w"] = _safe_float(high_s.tail(15).max())
         ind["low_3w"] = _safe_float(low_s.tail(15).min())
 
@@ -247,11 +280,13 @@ async def download_and_ingest(trade_date: date) -> dict:
 
     # 1. Check if already ingested
     existing = client.table("bhavcopy_ingestion_log") \
-        .select("status,rows_ingested") \
+        .select("status,rows_ingested,expected_rows,partial_ingest,source_url,attempt_count") \
         .eq("trade_date", str(trade_date)) \
         .execute()
-    if existing.data and existing.data[0]["status"] == "success" and (existing.data[0].get("rows_ingested") or 0) > 0:
-        return {"status": "already_done", "trade_date": str(trade_date), "rows_ingested": existing.data[0].get("rows_ingested")}
+    if existing.data:
+        completed_rows = _completed_ingest_rows(client, existing.data[0], trade_date, source_url)
+        if completed_rows is not None:
+            return {"status": "already_done", "trade_date": str(trade_date), "rows_ingested": completed_rows, "partial_ingest": False}
 
     # 2. Mark as pending
     attempt_count = 1
@@ -300,19 +335,15 @@ async def download_and_ingest(trade_date: date) -> dict:
         missing = required - set(df.columns)
         if missing:
             raise ValueError(f"Missing columns after normalisation: {missing}. Available: {list(df.columns)}")
+        _validate_source_trade_date(df, trade_date)
 
         # 5. Filter valid series
         df["series"] = df["series"].str.strip().str.upper()
         df = df[df["series"].isin(VALID_SERIES)].copy()
         df["symbol"] = df["symbol"].str.strip().str.upper()
-
-        if "company_name" not in df.columns:
-            df["company_name"] = df["symbol"]
-        else:
-            df["company_name"] = df["company_name"].str.strip()
-
-        if "isin" not in df.columns:
-            df["isin"] = None
+        expected_rows = int(df["symbol"].nunique())
+        if expected_rows == 0:
+            raise ValueError("Source contains no supported symbols.")
 
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -329,23 +360,7 @@ async def download_and_ingest(trade_date: date) -> dict:
             df["turnover"] = pd.to_numeric(df["turnover"], errors="coerce")
 
         # 6. Upsert stock_universe
-        universe_rows = df[["symbol", "company_name", "series", "isin"]].drop_duplicates("symbol")
-        universe_data = []
-        for _, row in universe_rows.iterrows():
-            universe_data.append({
-                "symbol": row["symbol"],
-                "company_name": row["company_name"],
-                "series": row["series"],
-                "isin": row["isin"] if pd.notna(row.get("isin")) else None,
-                "is_active": True,
-            })
-
-        # Batch upsert in chunks of 500
-        for i in range(0, len(universe_data), 500):
-            client.table("stock_universe").upsert(
-                universe_data[i:i+500],
-                on_conflict="symbol"
-            ).execute()
+        _upsert_universe_from_bhavcopy(client, df)
 
         # 7. Upsert raw OHLCV
         ohlcv_rows = []
@@ -370,12 +385,11 @@ async def download_and_ingest(trade_date: date) -> dict:
 
         rows_ingested = len(ohlcv_rows)
         logger.info(f"Ingested {rows_ingested} rows for {trade_date}")
-        expected_rows = _expected_active_rows(client)
-        coverage_pct = round((rows_ingested / expected_rows) * 100, 2) if expected_rows else None
-        partial_ingest = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
+        coverage_pct = round((rows_ingested / expected_rows) * 100, 2)
+        partial_ingest = rows_ingested < expected_rows
         warning_parts = []
         if partial_ingest:
-            warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%).")
+            warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} source symbols ({coverage_pct}%).")
 
         # 8 & 9. Compute indicators via bulk fetch (one query, not N queries)
         update_batch = _compute_indicators_bulk(client, df["symbol"].unique().tolist(), trade_date)

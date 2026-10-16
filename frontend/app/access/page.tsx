@@ -5,9 +5,9 @@ import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 const supportEmail = "support@alphavyuh.com";
 
 const accessPosture = [
-  "Account access is reviewed before billing is enabled",
+  "Create a Free account and verify your email to sign in",
   "Market data with source and freshness shown in product",
-  "Broker read-only checks and filled-trade import only",
+  "Broker read-only checks and filled-trade import require Pro or Elite",
   "Live and sandbox broker order placement not enabled yet",
   "Checkout opens after account approval and billing configuration",
   "Educational workflow and journal tool, not investment advice",
@@ -18,7 +18,7 @@ const accessIncludes = [
   "EOD scanner presets for finding actionable names.",
   "Watchlists that keep symbol focus, chart context, notes, and review state together.",
   "Full chart with saved indicators, drawing tools, and data-source context.",
-  "Broker import and journal capture for turning completed trades into review material.",
+  "Journal capture and analytics for your recorded trades.",
 ];
 
 const limitations = [
@@ -53,8 +53,8 @@ export default function AccessPage() {
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
             AlphaVyuh connects Dashboard, Scanner, Watchlist, chart planning, journal capture,
-            and review so every decision keeps its market context. Access is account-managed
-            while live broker order placement remains disabled.
+            and review so every decision keeps its market context. Create a Free account
+            to start scanning, planning, and journaling. Live broker order placement remains disabled.
           </p>
         </header>
 
@@ -106,7 +106,7 @@ export default function AccessPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Included in access">
+          <Panel title="Free account workflow">
             <ul className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
               {accessIncludes.map((item) => (
                 <li key={item} className="border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
@@ -114,6 +114,9 @@ export default function AccessPage() {
                 </li>
               ))}
             </ul>
+            <p className="mt-4 text-sm leading-6 text-[#b6c0ce]">
+              Journal analytics are included on Free; AI journal review requires Pro or Elite.
+            </p>
           </Panel>
 
           <Panel title="Data and execution policy">
@@ -130,7 +133,7 @@ export default function AccessPage() {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-6">
           <Link href="/signup" className="rounded-full bg-[#c8f7ee] px-5 py-3 text-sm font-bold text-[#04120d]">
-            Request access
+            Create account
           </Link>
           <Link href="/login" className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-[#f4f7fb]">
             Sign in

@@ -52,6 +52,45 @@ def _user_id_from_local_jwt(token: str) -> str | None:
     return str(subject) if subject else None
 
 
+def _auth_provider_error(error: Exception) -> HTTPException:
+    provider_status = getattr(error, "status", 0)
+    provider_status = provider_status if isinstance(provider_status, int) else 0
+    code = getattr(error, "code", "")
+    code = code if isinstance(code, str) else ""
+    message = str(error).lower()
+    restricted = any(marker in message for marker in (
+        "exceed_db_size_quota", "restricted due to the following violations",
+        "remove spend caps", "upgrade their plan",
+    ))
+    # A rejected application key is a server configuration failure, not a bad user session.
+    invalid_api_key = code == "invalid_api_key" or "invalid api key" in message
+    if restricted or invalid_api_key or provider_status >= 500 or provider_status == 408 or code in {
+        "unexpected_failure", "request_timeout",
+    }:
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is temporarily unavailable",
+        )
+    if provider_status == 429 or code in {"over_request_rate_limit", "over_email_send_rate_limit"}:
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before trying again",
+        )
+    if provider_status in {400, 401, 403, 422} or code in {
+        "bad_jwt", "invalid_credentials", "user_not_found", "user_banned",
+        "session_not_found", "session_expired",
+    }:
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+        )
+    # Network, client setup, and unknown provider failures are not evidence of an invalid JWT.
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Authentication service is temporarily unavailable",
+    )
+
+
 async def _validate_token(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> tuple[str, str]:
@@ -73,11 +112,8 @@ async def _validate_token(
         return str(user.id), token
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed",
-        )
+    except Exception as error:
+        raise _auth_provider_error(error) from None
 
 
 async def get_current_user_id(

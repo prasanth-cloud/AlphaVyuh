@@ -1,13 +1,15 @@
-import { ImageResponse } from "@vercel/og";
+import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const p = new URL(req.url).searchParams;
-  const symbol = p.get("symbol") || "NSE";
-  const price = p.get("price") || "–";
-  const change = parseFloat(p.get("change") || "0");
-  const color = change >= 0 ? "#2DB574" : "#E15560";
+  const symbol = (p.get("symbol")?.trim() || "NSE").slice(0, 32);
+  const price = (p.get("price")?.trim() || "–").slice(0, 32);
+  const rawChange = p.get("change")?.trim();
+  const parsedChange = rawChange ? Number(rawChange) : NaN;
+  const change = Number.isFinite(parsedChange) ? parsedChange : null;
+  const color = change === null ? "#A8A29E" : change >= 0 ? "#2DB574" : "#E15560";
 
   return new ImageResponse(
     (
@@ -37,11 +39,10 @@ export async function GET(req: Request) {
           {symbol}
         </div>
         <div style={{ color: "#A8A29E", fontSize: "32px", marginTop: "8px" }}>
-          ₹{price}
+          {`₹${price}`}
         </div>
         <div style={{ color, fontSize: "24px", marginTop: "8px" }}>
-          {change >= 0 ? "+" : ""}
-          {change.toFixed(2)}%
+          {change === null ? "Change unavailable" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`}
         </div>
         <div style={{ color: "#6A6A6A", fontSize: "14px", marginTop: "40px" }}>
           alphavyuh.com
