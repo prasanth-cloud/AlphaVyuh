@@ -1,16 +1,28 @@
 from datetime import date, timedelta
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import yfinance as yf
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
-from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
+from app.services.journal_snapshots import (
+    InvalidJournalSnapshot,
+    JournalEntryNotFound,
+    JournalSnapshotUnavailable,
+    attach_snapshot,
+    read_snapshot,
+    remove_snapshot_paths_best_effort,
+    MAX_SNAPSHOT_BYTES,
+)
+from app.services.rate_limit import RateLimiter
+from app.services.supabase import get_admin_client, get_user_client
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
+MAX_SNAPSHOT_REQUEST_BYTES = MAX_SNAPSHOT_BYTES + 4096
+journal_snapshot_limiter = RateLimiter(max_calls=10, period=60.0)
 
 
 def _get_user_plan(user_id: str) -> str:
@@ -62,6 +74,10 @@ class JournalUpdate(BaseModel):
     thesis: Optional[str] = None
     invalidation_rule: Optional[str] = None
     status: Optional[str] = None
+
+
+class JournalSnapshotCreate(BaseModel):
+    state: dict[str, Any]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -370,6 +386,92 @@ async def create_entry(
     return created
 
 
+def _snapshot_response(
+    state: dict[str, Any] | None,
+    *,
+    storage_path: str | None = None,
+    already_captured: bool = False,
+) -> dict[str, Any]:
+    return {
+        "available": state is not None,
+        "snapshot_kind": "structured_chart_state" if state is not None else None,
+        "schema_version": state.get("schema_version") if state is not None else None,
+        "captured_at": state.get("captured_at") if state is not None else None,
+        "state": state,
+        "storage_path": storage_path if state is not None else None,
+        "image_available": False,
+        "image_url": None,
+        "already_captured": already_captured,
+    }
+
+
+@router.post("/{entry_id}/snapshot")
+async def create_snapshot(
+    entry_id: str,
+    request: Request,
+    body: JournalSnapshotCreate,
+    user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
+):
+    if not journal_snapshot_limiter.is_allowed(user_id):
+        retry_after = journal_snapshot_limiter.retry_after(user_id)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many snapshot requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
+        if declared_size < 0:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+        if declared_size > MAX_SNAPSHOT_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Snapshot request is too large")
+    user_client = get_user_client(user_token)
+    admin_client = get_admin_client()
+    try:
+        state, created = attach_snapshot(
+            admin_client,
+            user_id,
+            entry_id,
+            body.state,
+            authorization_client=user_client,
+        )
+    except JournalEntryNotFound as exc:
+        raise HTTPException(status_code=404, detail="Entry not found") from exc
+    except InvalidJournalSnapshot as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except JournalSnapshotUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return _snapshot_response(
+        state,
+        storage_path=f"{user_id}/{entry_id}.json",
+        already_captured=not created,
+    )
+
+
+@router.get("/{entry_id}/snapshot")
+async def get_snapshot(
+    entry_id: str,
+    user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
+):
+    user_client = get_user_client(user_token)
+    try:
+        state = read_snapshot(user_client, user_id, entry_id)
+    except JournalEntryNotFound as exc:
+        raise HTTPException(status_code=404, detail="Entry not found") from exc
+    except (InvalidJournalSnapshot, JournalSnapshotUnavailable) as exc:
+        raise HTTPException(status_code=503, detail="Journal snapshot is temporarily unavailable") from exc
+    return _snapshot_response(
+        state,
+        storage_path=f"{user_id}/{entry_id}.json" if state is not None else None,
+    )
+
+
 @router.patch("/{entry_id}")
 async def update_entry(
     entry_id: str,
@@ -469,7 +571,27 @@ async def delete_entry(
     user_id: str = Depends(get_current_user_id),
 ):
     sb = get_admin_client()
-    sb.table("trade_journal").delete().eq("id", entry_id).eq("user_id", user_id).execute()
+    # The service-role-only RPC deletes the owner-scoped row and returns its
+    # object paths atomically, serializing against the snapshot claim UPDATE.
+    deleted = sb.rpc(
+        "delete_trade_journal_with_snapshot_paths",
+        {"p_entry_id": entry_id, "p_user_id": user_id},
+    ).execute()
+    deleted_rows = deleted.data or []
+    if not deleted_rows:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    deleted_row = deleted_rows[0]
+    snapshot_paths = [
+        path
+        for path in (
+            deleted_row.get("snapshot_state_path"),
+            deleted_row.get("snapshot_image_path"),
+        )
+        if isinstance(path, str)
+    ]
+    # Storage cleanup is deliberately idempotent and best effort after commit.
+    # An orphaned private object is preferable to a live row with a missing file.
+    remove_snapshot_paths_best_effort(sb, user_id, entry_id, snapshot_paths)
     return {"message": "Deleted"}
 
 

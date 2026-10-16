@@ -145,6 +145,57 @@ describe("mock order flow", () => {
     expect(intentEntries[0].id).toBe(first.journal_id);
   });
 
+  it("persists immutable chart context on the created mock journal entry", async () => {
+    const {
+      attachJournalChartSnapshot,
+      getJournalChartSnapshot,
+      getJournalEntries,
+      placeOrder,
+    } = await import("@/lib/api");
+    const { buildChartSnapshotState } = await import("@/lib/chart-snapshot");
+
+    const order = await placeOrder({
+      symbol: "RELIANCE",
+      side: "buy",
+      quantity: 1,
+      price: 1500,
+      order_type: "market",
+      source_page: "chart",
+      idempotency_key: "33333333-3333-4333-8333-333333333333",
+    });
+    expect(order.journal_id).toBeTruthy();
+
+    const state = buildChartSnapshotState({
+      symbol: "RELIANCE",
+      timeframe: "D",
+      range_label: "1Y",
+      chart_type: "candles",
+      visible_range: { from: 12, to: 90 },
+      indicators: ["ema20", "ema50"],
+      drawings: [],
+      entry_price: 1500,
+      last_bar_time: "2026-07-15",
+      data_source: "NSE EOD",
+      data_mode: "eod",
+      data_as_of: "2026-07-15",
+      captured_at: "2026-07-16T12:00:00.000Z",
+    });
+    const attached = await attachJournalChartSnapshot(order.journal_id!, state);
+    const journal = await getJournalEntries({ symbol: "RELIANCE", status: "open" });
+    const entry = journal.entries.find((candidate) => candidate.id === order.journal_id);
+    const stored = await getJournalChartSnapshot(order.journal_id!);
+
+    expect(attached.available).toBe(true);
+    expect(entry?.snapshot_state_path).toBe(`mock://trade-snapshots/${order.journal_id}.json`);
+    expect(entry?.snapshot_captured_at).toBe("2026-07-16T12:00:00.000Z");
+    expect(stored.state).toMatchObject({ symbol: "RELIANCE", entry_price: 1500 });
+
+    vi.resetModules();
+    const { getJournalChartSnapshot: getSnapshotAfterReload } = await import("@/lib/api");
+    const restored = await getSnapshotAfterReload(order.journal_id!);
+    expect(restored.state).toMatchObject({ symbol: "RELIANCE", entry_price: 1500 });
+  });
+
   it("rejects a materially changed mock order that reuses an intent key", async () => {
     const { placeOrder } = await import("@/lib/api");
     const intentKey = "22222222-2222-4222-8222-222222222222";

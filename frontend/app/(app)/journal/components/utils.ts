@@ -181,9 +181,6 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
     outcome ? { label: "Outcome", value: outcome } : null,
     focus ? { label: "Process focus", value: focus } : null,
     scanner?.data_as_of ? { label: "Data at entry", value: scanner.data_as_of } : null,
-    scanner?.chart_snapshot?.chart_url
-      ? { label: "Chart at entry", value: scanner.chart_snapshot.chart_url }
-      : null,
     { label: "Source", value: sourceLabel },
   ].filter((item): item is { label: string; value: string } => Boolean(item?.value));
 
