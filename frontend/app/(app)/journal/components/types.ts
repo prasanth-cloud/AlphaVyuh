@@ -7,7 +7,8 @@ export type {
   UpdateJournalEntry,
   SymbolSearchResult,
   AiPatterns,
+  JournalWeeklyReviewResponse,
 } from "@/lib/api";
 
 export type PanelMode = "add" | "close" | "view" | null;
-export type Tab = "queue" | "ai" | "analytics" | "trades";
+export type Tab = "queue" | "weekly" | "ai" | "analytics" | "trades";

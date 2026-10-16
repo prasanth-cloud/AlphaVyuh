@@ -6,6 +6,8 @@ import { Card } from "@/components/ui";
 import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
+import { JOURNAL_RULE_BREAKS, isCompletedProcessReview } from "@/lib/journal-weekly-review";
+import type { JournalRuleBreakCode, SaveJournalProcessReviewRequest, SetupAdherence } from "@/lib/api";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
@@ -65,7 +67,10 @@ interface TradePanelProps {
   // View + shared
   onClose: () => void;
   onGetLesson: (e: JournalEntry) => void;
-  onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
+  onSaveProcessReview: (
+    e: JournalEntry,
+    review: Omit<SaveJournalProcessReviewRequest, "schema_version" | "expected_updated_at">,
+  ) => void;
   onInitiateClose: (e: JournalEntry) => void;
   reviewSaving: boolean;
   chartPrefilled?: boolean;
@@ -101,21 +106,36 @@ export function TradePanel({
   onCloseTrade,
   onClose,
   onGetLesson,
-  onSaveReviewLesson,
+  onSaveProcessReview,
   onInitiateClose,
   reviewSaving,
   chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
+  const [plannedSetupDraft, setPlannedSetupDraft] = useState("");
+  const [adherenceDraft, setAdherenceDraft] = useState<SetupAdherence | null>(null);
+  const [ruleBreakDraft, setRuleBreakDraft] = useState<JournalRuleBreakCode[]>([]);
 
   useEffect(() => {
-    setLessonDraft("");
-  }, [selectedEntry?.id]);
+    setLessonDraft(selectedEntry?.review_lesson ?? selectedEntry?.lessons ?? "");
+    setPlannedSetupDraft(selectedEntry?.planned_setup ?? selectedEntry?.setup_type ?? "");
+    setAdherenceDraft(selectedEntry?.setup_adherence ?? null);
+    setRuleBreakDraft(selectedEntry?.rule_breaks ?? []);
+  }, [selectedEntry]);
 
   if (!mode) return null;
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
   const reviewContext = selectedEntry ? getReviewContext(selectedEntry) : null;
   const reviewDraft = lessonDraft.trim();
+  const processReviewComplete = selectedEntry ? isCompletedProcessReview(selectedEntry) : false;
+  const needsRuleBreak = adherenceDraft === "partial" || adherenceDraft === "not_followed";
+  const processReviewReady = Boolean(
+    plannedSetupDraft.trim()
+    && adherenceDraft
+    && reviewDraft
+    && (!needsRuleBreak || ruleBreakDraft.length > 0)
+    && (needsRuleBreak || ruleBreakDraft.length === 0),
+  );
   const workflowSymbol = selectedEntry?.symbol ?? selectedSymbol;
   const workflowLinks = getJournalWorkflowLinks(workflowSymbol || undefined);
 
@@ -462,46 +482,107 @@ export function TradePanel({
               </div>
             )}
 
-            {selectedEntry.lessons ? (
-              <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--gain-subtle)", border: "1px solid var(--border-subtle)" }}>
-                <div className="label" style={{ marginBottom: 8, color: "var(--gain)" }}>Trade lesson</div>
-                {selectedEntry.lessons.split("\n").map((line, i) => {
-                  if (!line.trim()) return null;
-                  const clean = line.replace(/^[-•*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1");
-                  return (
-                    <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 12, lineHeight: 1.6, marginBottom: 4, color: "var(--text-secondary)" }}>
-                      <span style={{ color: "var(--gain)", flexShrink: 0, marginTop: 2 }}>•</span>
-                      <span>{clean}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : selectedEntry.status === "closed" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
-                  This trade is closed but has not been reviewed yet. Save one process lesson from your original idea and outcome.
+            {selectedEntry.status === "closed" && (
+              <div data-testid="journal-process-review" style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                  <div>
+                    <div className="label" style={{ marginBottom: 4 }}>Process review</div>
+                    <div className="caption">Self-reported adherence evidence. It does not measure profitability or predict outcomes.</div>
+                  </div>
+                  <span className="caption" style={{ color: processReviewComplete ? "var(--gain)" : "var(--warn)", whiteSpace: "nowrap" }}>
+                    {processReviewComplete ? "Reviewed" : "Adherence not reviewed"}
+                  </span>
                 </div>
+
+                <div>
+                  <label className="label" htmlFor="journal-planned-setup" style={{ display: "block", marginBottom: 6 }}>Planned setup</label>
+                  <input
+                    id="journal-planned-setup"
+                    value={plannedSetupDraft}
+                    maxLength={80}
+                    onChange={(event) => setPlannedSetupDraft(event.target.value)}
+                    placeholder="Name the setup you intended to trade"
+                    style={inputStyle}
+                  />
+                  {!selectedEntry.planned_setup && selectedEntry.setup_type && (
+                    <div className="caption" style={{ marginTop: 5 }}>Pre-filled from the trade tag. Confirm or change it as a self-reported plan; the original plan was not captured separately.</div>
+                  )}
+                </div>
+
+                <fieldset style={{ display: "grid", gap: 6 }}>
+                  <legend className="label" style={{ marginBottom: 6 }}>Did the trade follow that setup?</legend>
+                  <div className="journal-adherence-options">
+                    {([
+                      ["followed", "Followed"],
+                      ["partial", "Partly"],
+                      ["not_followed", "Broke plan"],
+                      ["not_applicable", "Not applicable"],
+                    ] as Array<[SetupAdherence, string]>).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={adherenceDraft === value}
+                        className={`workspace-chip-button${adherenceDraft === value ? " active" : ""}`}
+                        onClick={() => {
+                          setAdherenceDraft(value);
+                          if (value === "followed" || value === "not_applicable") setRuleBreakDraft([]);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {needsRuleBreak && (
+                  <fieldset style={{ display: "grid", gap: 6 }}>
+                    <legend className="label" style={{ marginBottom: 6 }}>Concrete rule breaks</legend>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {JOURNAL_RULE_BREAKS.map(({ code, label }) => {
+                        const active = ruleBreakDraft.includes(code);
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            aria-pressed={active}
+                            className={`workspace-chip-button${active ? " active" : ""}`}
+                            onClick={() => setRuleBreakDraft((current) => active ? current.filter((item) => item !== code) : [...current, code])}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                )}
+
                 <div>
                   <div className="label" style={{ marginBottom: 6 }}>Lesson to carry forward</div>
                   <textarea
                     value={lessonDraft}
                     onChange={ev => setLessonDraft(ev.target.value)}
+                    maxLength={500}
                     rows={3}
                     placeholder="Example: Wait for volume confirmation before treating the breakout as valid."
                     style={{ ...inputStyle, resize: "none" }}
                   />
                 </div>
                 <button
-                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft)}
-                  disabled={reviewSaving || !reviewDraft}
-                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, border: "1px solid var(--accent)", color: "var(--text-on-accent)", background: "var(--accent)", cursor: reviewSaving || !reviewDraft ? "not-allowed" : "pointer", opacity: reviewSaving || !reviewDraft ? 0.5 : 1 }}
+                  onClick={() => adherenceDraft && onSaveProcessReview(selectedEntry, {
+                    planned_setup: plannedSetupDraft.trim(),
+                    adherence: adherenceDraft,
+                    rule_breaks: ruleBreakDraft,
+                    lesson: reviewDraft,
+                  })}
+                  disabled={reviewSaving || !processReviewReady}
+                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, border: "1px solid var(--accent)", color: "var(--text-on-accent)", background: "var(--accent)", cursor: reviewSaving || !processReviewReady ? "not-allowed" : "pointer", opacity: reviewSaving || !processReviewReady ? 0.5 : 1 }}
                 >
-                  {reviewSaving ? "Saving review..." : "Save review"}
+                  {reviewSaving ? "Saving review..." : "Save process review"}
                 </button>
-                <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
+                {!reviewDraft && <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
                   style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
-                  {lessonLoading === selectedEntry.id ? "Generating lesson..." : "Generate lesson for this trade"}
-                </button>
+                  {lessonLoading === selectedEntry.id ? "Generating lesson..." : "Draft a lesson for this trade"}
+                </button>}
               </div>
             )}
 

@@ -442,9 +442,26 @@ export function mockSearchSymbols(q: string): SymbolSearchResult[] {
 
 export function mockJournalEntries(): { entries: JournalEntry[]; total: number; plan: string; history_months: null } {
   const entries: JournalEntry[] = [
-    journal("j1", "DIXON", "long", 13940, 14220, 12, "Breakout continuation", "closed"),
+    {
+      ...journal("j1", "DIXON", "long", 13940, 14220, 12, "Breakout continuation", "closed"),
+      review_schema_version: 1,
+      planned_setup: "Breakout continuation",
+      setup_adherence: "followed",
+      rule_breaks: [],
+      review_lesson: "Wait for confirmation and keep risk fixed.",
+      reviewed_at: "2026-04-25T10:00:00Z",
+    },
     journal("j2", "RELIANCE", "long", 1364, null, 40, "Mean reversion at support", "open"),
-    journal("j3", "PERSISTENT", "long", 4720, 4956, 20, "Stage 2 pullback", "closed"),
+    {
+      ...journal("j3", "PERSISTENT", "long", 4720, 4956, 20, "Stage 2 pullback", "closed"),
+      exit_date: "2026-05-01",
+      review_schema_version: 1,
+      planned_setup: "Stage 2 pullback",
+      setup_adherence: "partial",
+      rule_breaks: ["entry_outside_plan"],
+      review_lesson: "Record the trigger before entry.",
+      reviewed_at: "2026-05-02T10:00:00Z",
+    },
   ];
   return { entries, total: entries.length, plan: "mock", history_months: null };
 }

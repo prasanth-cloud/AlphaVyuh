@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "reviewed_trades": 4,
+  "adherence": {
+    "followed": 1,
+    "partial": 1,
+    "not_followed": 1,
+    "not_applicable": 1,
+    "denominator": 3
+  }
+}

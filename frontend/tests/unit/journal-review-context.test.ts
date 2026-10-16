@@ -157,7 +157,7 @@ describe("journal review context", () => {
     });
   });
 
-  it("uses saved lessons as the reviewed marker for closed trades", () => {
+  it("uses explicit process-review fields as the reviewed marker for closed trades", () => {
     expect(getTradeFlowMeta({
       entry_reason: "Chart order",
       status: "open",
@@ -175,7 +175,18 @@ describe("journal review context", () => {
     expect(getTradeFlowMeta({
       entry_reason: "Manual log",
       status: "closed",
-      lessons: "Wait for confirmation.",
+      lessons: "Legacy or AI-authored lesson.",
+      source_page: "manual",
+    })).toMatchObject({ reviewLabel: "Needs review", reviewTone: "warn" });
+
+    expect(getTradeFlowMeta({
+      entry_reason: "Manual log",
+      status: "closed",
+      lessons: "Legacy lesson remains separate.",
+      review_schema_version: 1,
+      setup_adherence: "followed",
+      review_lesson: "Wait for confirmation.",
+      reviewed_at: "2026-07-10T10:00:00Z",
       source_page: "manual",
     })).toMatchObject({ reviewLabel: "Reviewed", reviewTone: "gain" });
   });
@@ -186,6 +197,10 @@ describe("journal review context", () => {
         entry_reason: "Scanner: Trend Template",
         status: "closed",
         lessons: "Waited for volume confirmation.",
+        review_schema_version: 1,
+        setup_adherence: "followed",
+        review_lesson: "Waited for volume confirmation.",
+        reviewed_at: "2026-07-10T10:00:00Z",
         source_page: "scanner",
         source_context: "Trend Template",
         scanner_context: { source: "scanner", preset_name: "Trend Template", match_reasons: ["Volume expansion"], setup_score: 82 },
@@ -233,9 +248,9 @@ describe("journal review context", () => {
 
   it("marks decision memory ready only after the review sample is fully covered", () => {
     const summary = getDecisionMemorySummary([
-      { entry_reason: "Chart order", status: "closed", lessons: "Good stop discipline.", source_page: "chart", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
-      { entry_reason: "Manual log", status: "closed", lessons: "Entry was late.", source_page: "manual", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
-      { entry_reason: "Scanner: Stage 2", status: "closed", lessons: "Volume faded.", source_page: "scanner", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Chart order", status: "closed", lessons: "Good stop discipline.", review_schema_version: 1, setup_adherence: "followed", review_lesson: "Good stop discipline.", reviewed_at: "2026-07-08T10:00:00Z", source_page: "chart", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Manual log", status: "closed", lessons: "Entry was late.", review_schema_version: 1, setup_adherence: "partial", review_lesson: "Entry was late.", reviewed_at: "2026-07-09T10:00:00Z", source_page: "manual", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Scanner: Stage 2", status: "closed", lessons: "Volume faded.", review_schema_version: 1, setup_adherence: "not_followed", review_lesson: "Volume faded.", reviewed_at: "2026-07-10T10:00:00Z", source_page: "scanner", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
     ]);
 
     expect(summary).toMatchObject({

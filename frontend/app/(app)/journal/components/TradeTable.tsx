@@ -17,6 +17,7 @@ interface TradeTableProps {
   symbolFocus: string;
   dateFocus: string;
   reviewFocus: "all" | "needs-review" | "reviewed";
+  entryFocusLabel?: string;
   onClearFocus: () => void;
   selectedEntry: JournalEntry | null;
   onSelectEntry: (e: JournalEntry) => void;
@@ -48,6 +49,7 @@ export function TradeTable({
   symbolFocus,
   dateFocus,
   reviewFocus,
+  entryFocusLabel,
   onClearFocus,
   selectedEntry,
   onSelectEntry,
@@ -76,7 +78,7 @@ export function TradeTable({
             </button>
           ))}
         </div>
-        {(symbolFocus || dateFocus || reviewFocus !== "all") && (
+        {(symbolFocus || dateFocus || reviewFocus !== "all" || entryFocusLabel) && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {symbolFocus && (
               <span className="mono" style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--accent-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
@@ -91,6 +93,11 @@ export function TradeTable({
             {reviewFocus !== "all" && (
               <span style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
                 {reviewFocus === "needs-review" ? "Needs review" : "Reviewed"}
+              </span>
+            )}
+            {entryFocusLabel && (
+              <span style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--accent-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+                {entryFocusLabel}
               </span>
             )}
             <button onClick={onClearFocus} style={{ fontSize: 11, color: "var(--text-tertiary)", cursor: "pointer" }}>
